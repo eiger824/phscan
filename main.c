@@ -18,12 +18,13 @@
 #include "time.h"
 #include "utils.h"
 #include "threads.h"
+#include "colors.h"
 
 #define         PSCAN_SIMPLE        0
 #define         PSCAN_ERROR         1
 #define         PSCAN_RANGE         2
 
-#define VERSION     0.1
+#define         VERSION             0.1
 
 static char *hostname_start;
 static char *hostname_end;
@@ -182,7 +183,8 @@ int parse_hosts(const char *str)
                 return PSCAN_SIMPLE;
             }
         case PSCAN_SIMPLE:
-            hostname_end = NULL;
+            // No need for hostname end
+            free (hostname_end);
             memcpy(hostname_start, str, strlen(str) + 1);
             hostname_start[strlen(str)] = '\0';
             // Copy local ptrs to global
@@ -299,8 +301,10 @@ int main(int argc , char **argv)
                 // Go through the results
                 for (unsigned i=0; i<MAX_THREAD_COUNT; ++i)
                 {
-                    printf("Host: \"%s\", port %d is %s\n",
-                            retvals[i].ip, port_start, (!lretvals[i].code ? "open.":"closed."));
+                    printf("%sHost: \"%s\", port %d is %s%s\n",
+                            (!lretvals[i].code ? GREEN : ""),
+                            retvals[i].ip, port_start, (!lretvals[i].code ? "open.":"closed."),
+                            RESET);
                 }
             }
             printf("Took %.2f seconds to scan\n", get_elapsed_secs(elapsed));
@@ -309,7 +313,47 @@ int main(int argc , char **argv)
         case m_BOTH:
             break;
         case m_PORT:
+            //Start the port scan loop
+            printf("Starting the portscan loop [%d-%d] on host \"%s\"\n"
+                    , port_start, port_end, hostname_start);
+            gettimeofday(&elapsed, NULL);
+            for( i = port_start ; i <= port_end ; i++) 
+            {
+                //Fill in the port number
+                sa.sin_port = htons(i);
+                //Create a socket of type internet
+                sock = socket(AF_INET , SOCK_STREAM , 0);
 
+                //Check whether socket created fine or not
+                if (sock < 0) 
+                {
+                    if (verbose)
+                    {
+                        printf(RED "Error connecting to port %d\n" RESET, i);
+                    }
+                }
+                else
+                {
+                    //Connect using that socket and sockaddr structure
+                    err = connect(sock , (struct sockaddr*)&sa , sizeof sa);
+
+                    //not connected
+                    if( err < 0 )
+                    {
+                        if (verbose)
+                        {
+                            printf("%-5d closed\n" , i);
+                            fflush(stdout);
+                        }
+                    }
+                    //connected
+                    else
+                    {
+                        printf(GREEN "%-5d open\n" RESET,  i);
+                    }
+                    close(sock);
+                }
+            }
             break;
         case m_NONE:
             fprintf(stderr, "Error: mode must be set\n");
@@ -320,43 +364,7 @@ int main(int argc , char **argv)
             help(program);
             exit(PSCAN_ERROR);
     }
-    //Start the port scan loop
-    printf("Starting the portscan loop [%d-%d] on host \"%s\"\n"
-            , port_start, port_end, hostname_start);
-    gettimeofday(&elapsed, NULL);
-    for( i = port_start ; i <= port_end ; i++) 
-    {
-        //Fill in the port number
-        sa.sin_port = htons(i);
-        //Create a socket of type internet
-        sock = socket(AF_INET , SOCK_STREAM , 0);
-
-        //Check whether socket created fine or not
-        if(sock < 0) 
-        {
-            perror("\nSocket");
-            exit(1);
-        }
-        //Connect using that socket and sockaddr structure
-        err = connect(sock , (struct sockaddr*)&sa , sizeof sa);
-
-        //not connected
-        if( err < 0 )
-        {
-            if (verbose)
-            {
-                printf("%-5d closed\n" , i);
-                fflush(stdout);
-            }
-        }
-        //connected
-        else
-        {
-            printf("%-5d open\n",  i);
-        }
-        close(sock);
-    }
     printf("Done (elapsed time: %.2f s).\n", get_elapsed_secs(elapsed));
-    fflush(stdout);
+    free(hostname_start);
     return(0);
 } 
