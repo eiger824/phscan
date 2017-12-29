@@ -16,11 +16,6 @@
 
 #define     MAX_THREAD_COUNT        1
 
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static int err;
-static struct hostent *host;
-static int sockfd;
-
 typedef struct return_val_struct
 {
     int code;
@@ -35,82 +30,30 @@ typedef struct thread_data
     char *ip;
 } thread_data_t;
 
-static pthread_t working_threads[MAX_THREAD_COUNT];
-unsigned  current_running_threads = 0;
-retval_t retvals[MAX_THREAD_COUNT];
 
-void *sock_connect(void *data)
-{
-    // Parse incoming data to current working thread
-    pthread_mutex_lock(&mutex);
-    thread_data_t *d = (thread_data_t*)data;
-    pthread_mutex_unlock(&mutex);
+/*
+ * Function:	sock_connect
+ * Brief:	    Function pointer, thread start point
+ * @param data:	Pointer to raw data containing some data individual to every
+                thread 
+ * Returns:	    The return values will be passed on to the calling thread via
+                the pthread_interface 
+*/
+void *sock_connect(void *data);
 
-    if (isdigit(d->ip[0]))
-    {
-        pthread_mutex_lock(&mutex);
-        d->sa->sin_addr.s_addr = inet_addr(d->ip);
-        pthread_mutex_unlock(&mutex);
-    }
-    else if ( (host = gethostbyname(d->ip)) != 0)
-    {
-        pthread_mutex_lock(&mutex);
-        strncpy((char*)&d->sa->sin_addr , (char*)host->h_addr , sizeof d->sa->sin_addr);
-        pthread_mutex_unlock(&mutex);
-    }
-    else
-    {
-        pthread_mutex_lock(&mutex);
-        herror(d->ip);
-        err = 1;
-        retvals[d->id].code = err;
-        retvals[d->id].ip = d->ip;
-        pthread_mutex_unlock(&mutex);
-    }
-
-    //Fill in the port number
-    pthread_mutex_lock(&mutex);
-    d->sa->sin_port = htons(d->port);
-    pthread_mutex_unlock(&mutex);
-    //Create a socket of type internet
-    pthread_mutex_lock(&mutex);
-    sockfd = socket(AF_INET , SOCK_STREAM , 0);
-    pthread_mutex_unlock(&mutex);
-
-    //Check whether socket created fine or not
-    if (sockfd < 0) 
-    {
-        pthread_mutex_lock(&mutex);
-        err = 1;
-        retvals[d->id].code = err;
-        retvals[d->id].ip = d->ip;
-        pthread_mutex_unlock(&mutex);
-
-    }
-    pthread_mutex_lock(&mutex);
-    err = connect(sockfd, (struct sockaddr*)&d->sa, sizeof d->sa);
-    pthread_mutex_unlock(&mutex);
-
-    retvals[d->id].code = err;
-    retvals[d->id].ip = d->ip;
-    if (sockfd >= 0)
-    {
-        pthread_mutex_lock(&mutex);
-        close(sockfd);
-        pthread_mutex_unlock(&mutex);
-    }
-    // Close this socket
-    pthread_exit(&retvals[d->id]);
-    return NULL;
-}
-
+/*
+ * Function:	fill_thread_data
+ * Brief:	    Given an input thread_data_t structure, this function fills it
+                with the provided values 
+ * @param data:	Thread data structure to fill
+ * @param id:	Thread ID to use
+ * @param port:	Port to attempt the connection to
+ * @param sa:	Server sockaddr_in structure, containing information about the
+                server to connect to 
+ * @param ip:	IPv4 address to connect to
+ * Returns:	    Nothing
+*/
 void fill_thread_data(thread_data_t *data, int id, int port,
-        struct sockaddr_in *sa, char *ip)
-{
-    data->id = id;
-    data->port = port;
-    data->sa = sa;
-    data->ip = ip;
-}
+        struct sockaddr_in *sa, char *ip);
 
 #endif  /* __THREADS_H_ */

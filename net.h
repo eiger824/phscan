@@ -7,52 +7,38 @@
 #include <stdio.h>
 
 #define         MAX_INT_VAL     0xffffffff
+#define         MIN_INT_VAL     0x00000000
 
 int sockfds[8];
 
-char * bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
-{
-    uint8_t first = ipaddr_bits >> 24;
-    uint8_t second = ipaddr_bits >> 16;
-    uint8_t third = ipaddr_bits >> 8;
-    uint8_t last = ipaddr_bits;
-    sprintf(ip, "%d.%d.%d.%d", first, second, third, last);
-    strcat(ip, "\0");
-    return ip;
-}
+/*
+ * Function:	        bits_2_ipaddr
+ * Brief:	            Given a 32-bit numeric IPv4 address, it converts it to
+                        the conventional XXX.XXX.XXX.XXX format
+ * @param ipaddr_bits:	The IPv4 address to transform
+ * @param ip:	        Pointer to the buffer to store the converted IP address
+ * Returns:	            A pointer to the converted string
+*/
+char * bits_2_ipaddr(uint32_t ipaddr_bits, char *ip);
 
-uint32_t ipaddr_2_bits(char *ipaddr_str)
-{
-    char *ipcpy = ipaddr_str;
-    uint32_t ip = 0x00000000;
-    char *c;
-    char tmp[4];
-    int cnt = 0;
-    while ((c = strchr(ipaddr_str, '.')) != NULL)
-    { 
-        memcpy(tmp, ipaddr_str, c-ipaddr_str);
-        tmp[c-ipaddr_str] = '\0';
-        ip |= (atoi(tmp) << ((3 - cnt) * 8));
-        ipaddr_str += (c - ipaddr_str) + 1;
-        // Last check on last octet
-        if ((c = strchr(ipaddr_str, '.')) == NULL)
-        {
-            memcpy(tmp,ipaddr_str,strlen(ipaddr_str));
-            tmp[strlen(ipaddr_str)] = '\0';
-            ip |= atoi(tmp);
-            break;
-        }
-        cnt++;
-    }
-    ipaddr_str = ipcpy;
-    return ip;
-}
+/*
+ * Function:	        ipaddr_2_bits
+ * Brief:	            Given a string representation of an IPv4 address, it
+                        outputs a 32-bit 
+                        integer 
+ * @param ipaddr_str:	Pointer to the string containing the IPv4 representation
+ * Returns:	            The 32-bit representation of the input IPv4
+*/
+uint32_t ipaddr_2_bits(char *ipaddr_str);
 
-char *get_next_ipaddr(char *current, char *next)
-{
-    uint32_t c = ipaddr_2_bits(current);
-    next = bits_2_ipaddr(++c, next);
-    return next;
-}
+/*
+ * Function:	    get_next_ipaddr
+ * Brief:	        Given a string representation of an IPv4 address, it returns
+                    the next IPv4 address on the same subnet 
+ * @param current:	The current IPv4 address string
+ * @param next:	    Buffer in which to store the next IPv4 address
+ * Returns:	        A pointer to the next address
+*/
+char *get_next_ipaddr(char *current, char *next);
 
 #endif   /* __NET_H */

@@ -32,6 +32,11 @@ static char *hostname_end;
 static struct timeval elapsed;
 static retval_t lretvals[MAX_THREAD_COUNT];
 
+// Defined in threads.h
+extern retval_t retvals[MAX_THREAD_COUNT];
+extern pthread_t working_threads[MAX_THREAD_COUNT];
+extern unsigned current_running_threads;
+
 typedef enum t_MODE
 {
     m_NONE,
