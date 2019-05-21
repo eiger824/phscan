@@ -45,7 +45,7 @@ typedef enum t_MODE
     m_BOTH
 } scan_mode_t;
 
-void help(char *program)
+void usage(char *program)
 {
     fprintf(stderr, "USAGE: %s [hv|V] m MODE p PORT(RANGE) H HOST(RANGE)\n",
             get_basename(program));
@@ -183,8 +183,8 @@ int parse_hosts(const char *str)
                 uint32_t wildcard = MAX_INT_VAL - netmask;
                 uint32_t ipend = ipstart + wildcard;
 
-                hostname_start = bits_2_ipaddr(ipstart, hostname_start);
-                hostname_end = bits_2_ipaddr(ipend, hostname_end);
+                bits_2_ipaddr(ipstart, hostname_start);
+                bits_2_ipaddr(ipend, hostname_end);
                 return PSCAN_SIMPLE;
             }
         case PSCAN_SIMPLE:
@@ -214,7 +214,7 @@ int main(int argc , char **argv)
     if (argc == 1)
     {
         fprintf(stderr, "Error: not enough input arguments\n");
-        help(program);
+        usage(program);
         exit(2);
     }
     // Allocate memory for host start and end
@@ -223,7 +223,7 @@ int main(int argc , char **argv)
         switch (c)
         {
             case 'h':
-                help(program);
+                usage(program);
                 exit(0);
             case 'v':
                 version(program);
@@ -236,7 +236,7 @@ int main(int argc , char **argv)
                 if (parse_hosts(optarg) == PSCAN_ERROR)
                 {
                     fprintf(stderr, "Wrong hostname format\n");
-                    help(program);
+                    usage(program);
                     exit(PSCAN_ERROR);
                 }
                 break;
@@ -245,7 +245,7 @@ int main(int argc , char **argv)
                 if (parse_mode(optarg, &mode) == PSCAN_ERROR)
                 {
                     fprintf(stderr, "Error: Unrecognized mode\n");
-                    help(program);
+                    usage(program);
                     exit(PSCAN_ERROR);
                 }
                 break;
@@ -253,12 +253,12 @@ int main(int argc , char **argv)
                 if (parse_ports(optarg, &port_start, &port_end) == PSCAN_ERROR)
                 {
                     fprintf(stderr, "Wrong port format\n");
-                    help(program);
+                    usage(program);
                     exit(PSCAN_ERROR);
                 }
                 break;
             default:
-                help(program);
+                usage(program);
                 exit(PSCAN_ERROR);
         }
     }
@@ -266,7 +266,7 @@ int main(int argc , char **argv)
     if (port_start == 0 || !hostname_start)
     {
         fprintf(stderr, "Error: at least one port or one start hostname must be given\n");
-        help(program);
+        usage(program);
         exit(PSCAN_ERROR);
     }
     //Initialise the sockaddr_in structure
@@ -284,7 +284,7 @@ int main(int argc , char **argv)
                     current < ipaddr_2_bits(hostname_end);
                     current+=MAX_THREAD_COUNT)
             {
-                *ip = *bits_2_ipaddr(current, ip);
+                //                 *ip = *bits_2_ipaddr(current, ip);
                 //direct ip address, use it
                 thread_data_t data[MAX_THREAD_COUNT];
                 for (unsigned i=0; i<MAX_THREAD_COUNT; ++i) 
@@ -295,7 +295,7 @@ int main(int argc , char **argv)
                     err = pthread_create(&working_threads[current_running_threads++],
                             NULL, &sock_connect, (void*)&data[i]);
                     // Fetch the next address
-                    get_next_ipaddr(ip, ip);
+                    //                     get_next_ipaddr(ip, ip);
                 }
                 // join the threads
                 for (unsigned i=0; i<MAX_THREAD_COUNT; ++i)
@@ -362,11 +362,11 @@ int main(int argc , char **argv)
             break;
         case m_NONE:
             fprintf(stderr, "Error: mode must be set\n");
-            help(program);
+            usage(program);
             exit(PSCAN_ERROR);
         default:
             fprintf(stderr, "Unknown mode %d\n", mode);
-            help(program);
+            usage(program);
             exit(PSCAN_ERROR);
     }
     printf("Done (elapsed time: %.2f s).\n", get_elapsed_secs(elapsed));

@@ -1,24 +1,30 @@
-PROGRAM=phscan
-CFLAGS=-c -Wall -Wextra -Wpedantic -fPIC --std=c11 -g
-LDFLAGS=-fPIC -lpthread
-CC=gcc
+PROGRAM 	= phscan
+CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC --std=c11 -g
+LDFLAGS		= -fPIC -lpthread
+CC			:= gcc
+OUTDIR 		:= build
 
-OBJS += main.o net.o threads.o time.o
+OBJS += main.o net.o threads.o time.o common.o
+
+OBJS := $(addprefix $(OUTDIR)/, $(OBJS))
+PROGRAM := $(addprefix $(OUTDIR)/, $(PROGRAM))
+
+
+all: $(OUTDIR) $(PROGRAM)
+
+$(OUTDIR):
+	test -d $@ || mkdir $@
 
 ${PROGRAM}: ${OBJS}
 	${CC} $^ ${LDFLAGS} -o $@
+	rm -f $(shell basename $@)
+	ln -s $(PROGRAM)
 
-main.o: main.c utils.h colors.h
+$(OUTDIR)/main.o: main.c utils.h colors.h
 	${CC} ${CFLAGS} $< -o $@
 
-net.o: net.c net.h
-	${CC} ${CFLAGS} $< -o $@
-
-threads.o: threads.c threads.h
-	${CC} ${CFLAGS} $< -o $@
-
-time.o: time.c time.h
+$(OUTDIR)/%.o: %.c %.h
 	${CC} ${CFLAGS} $< -o $@
 
 clean:
-	rm -f ${PROGRAM} *.o *~
+	rm -rf $(OUTDIR) $(shell basename $(PROGRAM)) *~
