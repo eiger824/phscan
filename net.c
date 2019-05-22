@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <netdb.h>
@@ -104,6 +105,7 @@ int do_dns_lookup(char * hostname , char* ip)
 
     return 1;
 }
+//TODO: return err/suceess, return list as arg
 host_t** build_hosts_list(char* str)
 {
     host_t** out;
@@ -119,8 +121,29 @@ host_t** build_hosts_list(char* str)
     }
     else if (is_subnet(str) == 0)
     {
-        out = (host_t**) malloc (sizeof*out * 123123);
-
+        size_t count = 0;
+        uint32_t i;
+        char ip_start[16];
+        char ip_current[16];
+        if (compute_ip_range(str, ip_start, &count) != 0)
+        {
+            out = (host_t**) malloc(sizeof*out);
+            out[0] = NULL;
+            return out;
+        }
+        // Allocate a big array of 'count' ip addresses in the pool
+        out = (host_t**) malloc (sizeof*out * count);
+        uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
+        for (i = 0; i < count; ++i)
+        {
+            out[i] = (host_t*) malloc(sizeof(host_t));
+            out[i]->dns_err = 0;
+            // Translate this numeric repr into a readable IP address
+            bits_2_ipaddr(ip_start_bits + i, ip_current);
+            // Store this IP address in the corresponding struct
+            strcpy(out[i]->hostname, ip_current);
+            strcpy(out[i]->ip, ip_current);
+        }
     }
     else
     {
@@ -174,4 +197,34 @@ int is_subnet(char* str)
                 "(/[0-9]+)?"
                 "$"
             );
+}
+
+int compute_ip_range(char* str, char* ip_start, size_t* count)
+{
+    // Str: assumed to be a subnet
+    // Let's get the count
+    char* sep;
+    int subnet;
+    char ip[16];
+
+    sep  = strchr(str, '/');
+    subnet = atoi(++sep);
+
+    if (subnet < 0 || subnet > 32)
+        return 1;
+
+    // Now that we have a valid subnet, count can easily be obtained
+    *count = pow(2, 32 - subnet);
+
+    char* to = strchr(str, '/');
+    // Copy the provided IP address
+    memcpy(ip, str, to - str);
+    ip[to - str] = '\0';
+    uint32_t bits = ipaddr_2_bits(ip);
+    uint32_t subnet_bits = (0xffffffff << (32 - subnet));
+    bits &= subnet_bits;
+
+    bits_2_ipaddr(bits, ip_start);
+
+    return 0;
 }

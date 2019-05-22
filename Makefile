@@ -1,6 +1,6 @@
 PROGRAM 	= phscan
 CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
-LDFLAGS		= -fPIC -lpthread
+LDFLAGS		= -fPIC -lpthread -lm
 CC			:= gcc
 OUTDIR 		:= build
 

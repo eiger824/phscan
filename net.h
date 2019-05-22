@@ -40,6 +40,7 @@ int connect_to_host(char* ip, uint16_t port);
 int do_dns_lookup(char * hostname , char* ip);
 int is_ip(char* str);
 int is_subnet(char* str);
+int compute_ip_range(char* str, char* ip_start, size_t* count);
 
 host_t** build_hosts_list(char* str);
 void free_host_list(host_t** host_list);
