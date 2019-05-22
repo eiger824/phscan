@@ -4,7 +4,12 @@ LDFLAGS		= -fPIC -lpthread -lm
 CC			:= gcc
 OUTDIR 		:= build
 
-OBJS += main.o net.o threads.o time.o common.o
+SRCS 		:= main.c colors.h \
+				net.c net.h \
+				common.c common.h \
+				time.c time.h
+
+OBJS 		:= main.o net.o threads.o time.o common.o
 
 OBJS := $(addprefix $(OUTDIR)/, $(OBJS))
 PROGRAM := $(addprefix $(OUTDIR)/, $(PROGRAM))
@@ -20,7 +25,7 @@ ${PROGRAM}: ${OBJS}
 	rm -f $(shell basename $@)
 	ln -s $(PROGRAM)
 
-$(OUTDIR)/main.o: main.c colors.h
+$(OUTDIR)/main.o: $(SRCS)
 	${CC} ${CFLAGS} $< -o $@
 
 $(OUTDIR)/%.o: %.c %.h

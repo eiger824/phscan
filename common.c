@@ -7,6 +7,7 @@
 
 #include "common.h"
 
+static int g_verbose = 0;
 
 void err(const char* msg, ...)
 {
@@ -34,9 +35,9 @@ void die(void (*usage_fun)(char*), char* program, const char* msg, ...)
     exit(1);
 }
 
-void dbg(int verbose, const char* msg, ...)
+void dbg(const char* msg, ...)
 {
-    if (!verbose)
+    if (!g_verbose)
         return;
 
     va_list args;
@@ -92,4 +93,9 @@ char find_delim(const char* str)
 int verify_port(int port)
 {
     return !(port >= 0 && port <= USHRT_MAX);
+}
+
+void set_verbose(int verbose)
+{
+    g_verbose = verbose;
 }

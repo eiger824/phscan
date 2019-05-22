@@ -9,7 +9,7 @@
  * @param t0:	Time structure to initialize with current UNIX timestamp
  * Returns:	    Nothing
 */
-void set_timer(struct timeval *t0);
+void set_timer(struct timeval* t0);
 
 /*
  * Function:	get_elapsed_secs
@@ -18,7 +18,7 @@ void set_timer(struct timeval *t0);
  * @param t0:	Time structure that was initialized some time ago
  * Returns:	    The elapsed seconds betwenn "t0" and the call to this function
 */
-double get_elapsed_secs(struct timeval t0);
+double get_elapsed_secs(struct timeval* t0);
 
 
 #endif  /* __TIME_H_ */
