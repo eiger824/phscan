@@ -33,6 +33,7 @@
 
 static struct timeval g_elapsed;
 static int g_color = 0;
+static int g_socket_timeout = 100; //ms
 
 // Defined in threads.h
 // extern retval_t retvals[MAX_THREAD_COUNT];
@@ -46,6 +47,8 @@ void usage(char *program)
             "-c                     Show colorized output\n"
             "-h                     Show this help and exit\n"
             "-p <port[{:,-}range]>  Perform an IP address scanning on the specified port\n"
+            "-t <timeout>           Set socket connection timeout in ms\n"
+            "                       Defaults to: %d ms.\n"
             "-v                     Show version information and exit\n"
             "-V                     Enable verbose\n"
             "\nNote 1: The port range shall be applied using one the following formats: \"start:end\"\n"
@@ -54,7 +57,7 @@ void usage(char *program)
             "Example usage 1: %s -p 20:30 -H 192.168.1.1\t\tDo a port scan from 20 to 30 on the given host\n"
             "Example usage 2: %s -p 80    -H 192.168.1.0/24\tDo a host scan in search for open port 80\n"
             "Example usage 3: %s -p 10,20 -H 192.168.1.0/24\tPerform both port and host scans\n"
-            , program, program, program, program );
+            , program, g_socket_timeout, program, program, program );
 
 }
 void version(char *program)
@@ -124,8 +127,6 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
     host_t** arr;
     host_t* h;
 
-    dbg("Starting port scanning in range [%d-%d]\n", port_start, port_end);
-
     if (argc - opt_index == 0 || port_start == -1 || port_end == -1)
     {
         err("Not enough input arguments: ");
@@ -137,6 +138,8 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
         usage(PHSCAN_PROGNAME);
         return PHSCAN_ERROR;
     }
+
+    dbg("Starting port scanning in range [%d-%d]\n", port_start, port_end);
 
     set_timer(&g_elapsed);
     // Loop through the hosts
@@ -158,7 +161,7 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
 
             for (port = port_start; port <= port_end; ++port)
             {
-                if (connect_to_host(h->ip, port) != 0)
+                if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
                     dbg("  %5d: closed\n", port);
                 else
                     info("  %s%5d: open%s\n",
@@ -183,7 +186,7 @@ int main(int argc , char **argv)
     port_end = -1;
 
     // Allocate memory for host start and end
-    while ((c = getopt(argc, argv, "chp:vV")) != -1)
+    while ((c = getopt(argc, argv, "chp:t:vV")) != -1)
     {
         switch (c)
         {
@@ -193,16 +196,19 @@ int main(int argc , char **argv)
             case 'h':
                 usage(PHSCAN_PROGNAME);
                 exit(0);
+            case 'p':
+                if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
+                    die(usage, PHSCAN_PROGNAME, "Wrong port format\n");
+                break;
+            case 't':
+                g_socket_timeout = atoi(optarg);
+                break;
             case 'v':
                 version(PHSCAN_PROGNAME);
                 exit(0);
             case 'V':
                 set_verbose(1);
                 info("Verbose is ON\n");
-                break;
-            case 'p':
-                if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
-                    die(usage, PHSCAN_PROGNAME, "Wrong port format\n");
                 break;
             default:
                 usage(PHSCAN_PROGNAME);

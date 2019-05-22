@@ -2,8 +2,10 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include <math.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <regex.h>
@@ -57,24 +59,67 @@ uint32_t ipaddr_2_bits(char *ip)
     return out;
 }
 
-int connect_to_host(char* host, uint16_t port)
+int connect_to_host(char* host, uint16_t port, int msecs)
 {
     struct sockaddr_in servaddr;
     int sockfd;
+    int res;
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         return 1;
     }
+    // Set this socket NON BLOCKING
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr(host);
     servaddr.sin_port = htons(port);
-    if (connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) != 0)
+
+    // Attempt connection to socket
+    res = connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
+
+    if (res == -1)
     {
-        close(sockfd);
-        return 1;
+        // Check errno, should be EINPROGRESS
+        if (errno != EINPROGRESS)
+        {
+            close(sockfd);
+            return 1;
+        }
+        fd_set wfd, efd;
+        FD_ZERO(&wfd);
+        FD_SET(sockfd, &wfd);
+        FD_ZERO(&efd);
+        FD_SET(sockfd, &efd);
+        // Set out desired timeout
+        struct timeval tv;
+        tv.tv_sec = msecs / 1e3;
+        tv.tv_usec = msecs * 1e3;
+
+        res = select(sockfd +1, NULL, &wfd, &efd, &tv);
+        if (res == -1)
+        {
+            close(sockfd);
+            return 2;
+        }
+        if (res == 0)
+        {
+            // Connect timed out => error happened
+            close(sockfd);
+            return 3;
+        }
+        if (FD_ISSET(sockfd, &efd))
+        {
+            close(sockfd);
+            return 4;
+        }
+        else
+        {
+            close(sockfd);
+            return 0;
+        }
     }
     // Close & exit, worked
     close(sockfd);
@@ -169,7 +214,7 @@ void free_host_list(host_t** host_list)
     host_t** arr = host_list;
     if (!host_list)
         return;
-    
+
     for (current_host = *arr; current_host; current_host=*++arr)
         free(current_host);
 
@@ -179,23 +224,23 @@ void free_host_list(host_t** host_list)
 int is_ip(char* str)
 {
     return regex_match(str,
-                "^([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))"
-                "$"
+            "^([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))"
+            "$"
             );
 }
 
 int is_subnet(char* str)
 {
     return regex_match(str,
-                "^([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
-                "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))"
-                "(/[0-9]+)?"
-                "$"
+            "^([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))."
+            "([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))"
+            "(/[0-9]+)?"
+            "$"
             );
 }
 

@@ -36,7 +36,7 @@ int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip);
 */
 uint32_t ipaddr_2_bits(char *ipaddr_str);
 
-int connect_to_host(char* ip, uint16_t port);
+int connect_to_host(char* host, uint16_t port, int msecs);
 int do_dns_lookup(char * hostname , char* ip);
 int is_ip(char* str);
 int is_subnet(char* str);
