@@ -2,9 +2,8 @@
    C port scanner
    */
 #include <stdio.h>
-#include <sys/socket.h>
+#include <sys/sysinfo.h>
 #include <sys/time.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
 #include <string.h>
@@ -18,7 +17,6 @@
 #include "net.h"
 #include "time.h"
 #include "common.h"
-#include "threads.h"
 #include "colors.h"
 
 #define         PHSCAN_PROGNAME      "phscan"
@@ -29,16 +27,10 @@
 
 #define         VERSION             0.2
 
-#define FIXME "localhost"
-
 static struct timeval g_elapsed;
 static int g_color = 0;
 static int g_socket_timeout = 100; //ms
-
-// Defined in threads.h
-// extern retval_t retvals[MAX_THREAD_COUNT];
-// extern pthread_t working_threads[MAX_THREAD_COUNT];
-// extern unsigned current_running_threads;
+static int g_threads = 1;
 
 void usage(char *program)
 {
@@ -46,9 +38,11 @@ void usage(char *program)
             "USAGE: %s [hv|V] -p PORT1[[:-,]PORTN)] HOST1[/SUBNET | HOST2 ...])\n"
             "-c                     Show colorized output\n"
             "-h                     Show this help and exit\n"
+            "-j <threads>           Run the scan in parallel\n"
+            "                       Note that for this machine, %d is the allowed maximum\n"
             "-p <port[{:,-}range]>  Perform an IP address scanning on the specified port\n"
             "-t <timeout>           Set socket connection timeout in ms\n"
-            "                       Defaults to: %d ms.\n"
+            "                       Defaults to: %d ms\n"
             "-v                     Show version information and exit\n"
             "-V                     Enable verbose\n"
             "\nNote 1: The port range shall be applied using one the following formats: \"start:end\"\n"
@@ -57,7 +51,7 @@ void usage(char *program)
             "Example usage 1: %s -p 20:30 -H 192.168.1.1\t\tDo a port scan from 20 to 30 on the given host\n"
             "Example usage 2: %s -p 80    -H 192.168.1.0/24\tDo a host scan in search for open port 80\n"
             "Example usage 3: %s -p 10,20 -H 192.168.1.0/24\tPerform both port and host scans\n"
-            , program, g_socket_timeout, program, program, program );
+            , program, get_nprocs(), g_socket_timeout, program, program, program );
 
 }
 void version(char *program)
@@ -119,10 +113,31 @@ int parse_ports(const char* str, int* port_start, int* port_end)
     return PHSCAN_RANGE;
 }
 
+size_t get_total_host_count(int argc, char* argv[], int opt_index)
+{
+    int i;
+    size_t total = 0;
+    size_t n;
+    for (i = opt_index; i < argc; ++i)
+    {
+        if ( is_ip(argv[i]) == 0)
+            total++;
+        else if ( is_subnet(argv[i]) == 0)
+        {
+            compute_ip_range(argv[i], NULL, &n);
+            total += n;
+        }
+        else
+            total++;
+    }
+    return total;
+}
+
 int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_end)
 {
     int i;
     int port;
+    size_t n;
     host_t** hosts;
     host_t** arr;
     host_t* h;
@@ -139,7 +154,10 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
         return PHSCAN_ERROR;
     }
 
-    dbg("Starting port scanning in range [%d-%d]\n", port_start, port_end);
+    n = get_total_host_count(argc, argv, optind);
+
+    dbg("Starting port scanning in range [%d-%d], %zu host%s\n",
+            port_start, port_end, n, n > 1 ? "s" : "");
 
     set_timer(&g_elapsed);
     // Loop through the hosts
@@ -186,7 +204,7 @@ int main(int argc , char **argv)
     port_end = -1;
 
     // Allocate memory for host start and end
-    while ((c = getopt(argc, argv, "chp:t:vV")) != -1)
+    while ((c = getopt(argc, argv, "chj:p:t:vV")) != -1)
     {
         switch (c)
         {
@@ -196,6 +214,16 @@ int main(int argc , char **argv)
             case 'h':
                 usage(PHSCAN_PROGNAME);
                 exit(0);
+            case 'j':
+                err("[threads] => FEATURE NOT YET SUPPORTED. Running with 1 thread\n");
+                g_threads = atoi(optarg);
+                if (g_threads < 0 || g_threads > get_nprocs())
+                {
+                    err("Invalid thread count. Accepted range: [1-%d]\n",
+                            get_nprocs());
+                    exit(PHSCAN_ERROR);
+                }
+                break;
             case 'p':
                 if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
                     die(usage, PHSCAN_PROGNAME, "Wrong port format\n");

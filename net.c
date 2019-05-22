@@ -64,13 +64,14 @@ int connect_to_host(char* host, uint16_t port, int msecs)
     struct sockaddr_in servaddr;
     int sockfd;
     int res;
+    fd_set wfd,rfd;
 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
     {
         return 1;
     }
     // Set this socket NON BLOCKING
-    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+//     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -79,49 +80,47 @@ int connect_to_host(char* host, uint16_t port, int msecs)
 
     // Attempt connection to socket
     res = connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
-
+    
     if (res == -1)
     {
         // Check errno, should be EINPROGRESS
         if (errno != EINPROGRESS)
         {
+            err("Unexpected error: %d (%s)\n", errno, strerror(errno));
             close(sockfd);
             return 1;
         }
-        fd_set wfd, efd;
+
         FD_ZERO(&wfd);
         FD_SET(sockfd, &wfd);
-        FD_ZERO(&efd);
-        FD_SET(sockfd, &efd);
+        FD_ZERO(&rfd);
+        FD_SET(sockfd, &rfd);
+
         // Set out desired timeout
         struct timeval tv;
         tv.tv_sec = msecs / 1e3;
         tv.tv_usec = msecs * 1e3;
 
-        res = select(sockfd +1, NULL, &wfd, &efd, &tv);
+        res = select(sockfd +1, &rfd, &wfd, NULL, &tv);
         if (res == -1)
         {
+            // ERROR ocurred => unsuccessful
             close(sockfd);
             return 2;
         }
-        if (res == 0)
+        else if (res == 1)
+        {
+            // SUCCESS
+            close(sockfd);
+            return 0;
+        }
+        else
         {
             // Connect timed out => error happened
             close(sockfd);
             return 3;
         }
-        if (FD_ISSET(sockfd, &efd))
-        {
-            close(sockfd);
-            return 4;
-        }
-        else
-        {
-            close(sockfd);
-            return 0;
-        }
     }
-    // Close & exit, worked
     close(sockfd);
     return 0;
 }
@@ -269,7 +268,8 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
     uint32_t subnet_bits = (0xffffffff << (32 - subnet));
     bits &= subnet_bits;
 
-    bits_2_ipaddr(bits, ip_start);
+    if (ip_start)
+        bits_2_ipaddr(bits, ip_start);
 
     return 0;
 }

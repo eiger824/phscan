@@ -1,6 +1,6 @@
 PROGRAM 	= phscan
 CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
-LDFLAGS		= -fPIC -lpthread -lm
+LDFLAGS		= -fPIC -lm
 CC			:= gcc
 OUTDIR 		:= build
 
@@ -9,7 +9,7 @@ SRCS 		:= main.c colors.h \
 				common.c common.h \
 				time.c time.h
 
-OBJS 		:= main.o net.o threads.o time.o common.o
+OBJS 		:= main.o net.o time.o common.o
 
 OBJS := $(addprefix $(OUTDIR)/, $(OBJS))
 PROGRAM := $(addprefix $(OUTDIR)/, $(PROGRAM))
