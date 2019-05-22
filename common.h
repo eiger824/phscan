@@ -3,7 +3,15 @@
 
 #include <stdarg.h>
 
+#define     port_t  uint16_t
+
 void err(const char* msg, ...);
-void die(const char* msg, ...);
+void info(const char* msg, ...);
+void die(void (*usage_fun)(char*), char* program, const char* msg, ...);
+void dbg(int verbose, const char* msg, ...);
+char *get_basename(char* str);
+int regex_match(const char* str, const char* regex);
+char find_delim(const char* str);
+int verify_port(int port);
 
 #endif /* COMMON_H_ */

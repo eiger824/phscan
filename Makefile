@@ -1,5 +1,5 @@
 PROGRAM 	= phscan
-CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC --std=c11 -g
+CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
 LDFLAGS		= -fPIC -lpthread
 CC			:= gcc
 OUTDIR 		:= build
@@ -20,7 +20,7 @@ ${PROGRAM}: ${OBJS}
 	rm -f $(shell basename $@)
 	ln -s $(PROGRAM)
 
-$(OUTDIR)/main.o: main.c utils.h colors.h
+$(OUTDIR)/main.o: main.c colors.h
 	${CC} ${CFLAGS} $< -o $@
 
 $(OUTDIR)/%.o: %.c %.h

@@ -9,7 +9,12 @@
 #define         MAX_INT_VAL     0xffffffff
 #define         MIN_INT_VAL     0x00000000
 
-int sockfds[8];
+typedef struct host
+{
+    char hostname[1024];
+    char ip[16];
+    int dns_err;
+} host_t;
 
 /*
  * Function:	        bits_2_ipaddr
@@ -30,5 +35,14 @@ int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip);
  * Returns:	            The 32-bit representation of the input IPv4
 */
 uint32_t ipaddr_2_bits(char *ipaddr_str);
+
+int connect_to_host(char* ip, uint16_t port);
+int do_dns_lookup(char * hostname , char* ip);
+int is_ip(char* str);
+int is_subnet(char* str);
+
+host_t** build_hosts_list(char* str);
+void free_host_list(host_t** host_list);
+
 
 #endif   /* __NET_H */
