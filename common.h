@@ -5,6 +5,9 @@
 
 #define     port_t  uint16_t
 
+#define PHSCAN_PORT_CLOSED  0
+#define PHSCAN_PORT_OPEN    1
+
 void err(const char* msg, ...);
 void info(const char* msg, ...);
 void die(void (*usage_fun)(char*), char* program, const char* msg, ...);

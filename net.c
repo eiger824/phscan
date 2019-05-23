@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <math.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <regex.h>
@@ -15,6 +14,9 @@
 
 #include "net.h"
 #include "common.h"
+#include "colors.h"
+
+static int g_color = 1;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
@@ -70,8 +72,6 @@ int connect_to_host(char* host, uint16_t port, int msecs)
     {
         return 1;
     }
-    // Set this socket NON BLOCKING
-//     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -179,17 +179,25 @@ static host_t** alloc_n_hosts(size_t count)
 	return out;
 }
 
-static void add_new_host(host_t** list, size_t index, host_t* host)
+static void add_new_host(host_t** list, size_t index, host_t* host, uint16_t port_start, uint16_t port_stop)
 {
+    uint16_t i;
 	if (!list)
 		return;
 	list[index] = (host_t*) malloc (sizeof(host_t));
 	strcpy(list[index]->ip, host->ip);
 	strcpy(list[index]->hostname, host->hostname);
 	list[index]->dns_err = host->dns_err;
+    list[index]->pinfo =
+        (struct port_info*) malloc(sizeof(struct port_info) * (port_stop - port_start + 1));
+    for (i = port_start; i < port_stop; ++i)
+    {
+        list[index]->pinfo[i - port_start].portno = i;
+    }
 }
 
-host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
+host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n,
+        uint16_t port_start, uint16_t port_stop)
 {
 	host_t** hosts;
 	int i;
@@ -200,7 +208,7 @@ host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
 	
 	*n = get_total_host_count(argc, argv, optind);
 	
-	hosts = alloc_n_hosts(*n + 1);
+    hosts = alloc_n_hosts(*n + 1);
 	hosts[*n] = NULL;
 	
 	host_t h;
@@ -209,9 +217,9 @@ host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
 		if ( is_ip(argv[i]) == 0)
 		{
 			strcpy(h.ip, argv[i]);
-			strcpy(h.hostname, argv[i]);
+            strcpy(h.hostname, argv[i]);
 			h.dns_err = 0;
-			add_new_host(hosts, current++, &h);
+			add_new_host(hosts, current++, &h, port_start, port_stop);
 		}
         else if ( is_subnet(argv[i]) == 0)
         {
@@ -229,7 +237,7 @@ host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
 				strcpy(h.hostname, ip_current);
 				strcpy(h.ip, ip_current);
 				// Add this host to the global list
-				add_new_host(hosts, current++, &h);
+                add_new_host(hosts, current++, &h, port_start, port_stop);
 			}
         }
         else
@@ -241,7 +249,7 @@ host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
 			strcpy(h.ip, ip);
 			strcpy(h.hostname, argv[i]);
 			
-			add_new_host(hosts, current++, &h);
+            add_new_host(hosts, current++, &h, port_start, port_stop);
 		}
 	}
 	
@@ -256,7 +264,10 @@ void free_host_list(host_t** host_list)
         return;
 
     for (current_host = *arr; current_host; current_host=*++arr)
+    {
+        free(current_host->pinfo);
         free(current_host);
+    }
 
     free(host_list);
 }
@@ -313,4 +324,27 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
         bits_2_ipaddr(bits, ip_start);
 
     return 0;
+}
+
+void dump_host_info(host_t** host_list, uint16_t port_start, uint16_t port_end)
+{
+    host_t** arr = host_list;
+    host_t* h;
+
+    for (h = *arr; h; h = *++arr)
+    {
+        info("%s%s%s (%s%s%s):\n",
+                COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
+                COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
+
+        for (uint16_t p = port_start; p <= port_end; ++p)
+        {
+            if (h->pinfo[p - port_start].status == PHSCAN_PORT_CLOSED)
+                dbg("  %5d: closed\n", p);
+            else
+                info("  %s%5d: open%s\n",
+                        COLOR_IF(GREEN), p, COLOR_IF(RESET));
+        }
+
+    }
 }

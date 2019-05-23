@@ -9,7 +9,6 @@
 static host_t** g_host_list;
 static int g_socket_timeout;
 static int g_color = 1;
-static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void* thread_run(void* data)
 {
@@ -20,26 +19,16 @@ static void* thread_run(void* data)
 	for (current = d->start; current <= d->stop; ++current)
 	{
 		host_t* h = g_host_list[current];
-		LOCK(&g_mutex);
-		info("%s%s%s (%s%s%s):\n",
-				COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
-				COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
-		UNLOCK(&g_mutex);
 		// Loop through ports
 		for (port = d->port_start; port <= d->port_stop; ++port)
 		{
 			if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
 			{
-				LOCK(&g_mutex);
-				dbg("  %5d: closed\n", port);
-				UNLOCK(&g_mutex);
+                h->pinfo[current - d->start].status = PHSCAN_PORT_CLOSED;
 			}
 			else
 			{
-				LOCK(&g_mutex);
-				info("  %s%5d: open%s\n",
-						COLOR_IF(GREEN), port, COLOR_IF(RESET));
-				UNLOCK(&g_mutex);
+                h->pinfo[current - d->start].status = PHSCAN_PORT_CLOSED;
 			}
 		}
 	}
@@ -47,14 +36,16 @@ static void* thread_run(void* data)
 	return NULL;
 }
 
-static void set_thread_data(tdata_t* data, int id, size_t start, size_t stop, uint16_t port_start, uint16_t port_stop)
+static void set_thread_data(tdata_t* data,
+        int id, size_t start, size_t stop,
+        uint16_t port_start, uint16_t port_stop)
 {
 	data->id = id;
 	data->start = start;
 	data->stop = stop;
 	data->port_start = port_start;
 	data->port_stop = port_stop;
-	printf("Thread ID #%d, IDX_start: %d, IDX_end: %d, Port start: %d, Port end: %d\n",
+    printf("Thread ID #%d, IDX_start: %zu, IDX_end: %zu, Port start: %d, Port end: %d\n",
 		id, start, stop, port_start, port_stop);
 }
 
@@ -80,8 +71,6 @@ void process_hosts(host_t** host_list, size_t count,
 		nthreads, nthreads > 1 ? "s" : "",
 		items_per_thread);
 		
-	return;
-			
 	for (i = 0; i < nthreads; ++i)
 	{
 		start = i * items_per_thread;

@@ -116,11 +116,8 @@ int parse_ports(const char* str, int* port_start, int* port_end)
 
 int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_end)
 {
-    int port;
     size_t n;
     host_t** hosts;
-    host_t** arr;
-    host_t* h;
 
     if (argc - opt_index == 0 || port_start == -1 || port_end == -1)
     {
@@ -133,22 +130,29 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
         usage(PHSCAN_PROGNAME);
         return PHSCAN_ERROR;
     }
+    // Make sure start is always <= than end...
+    if (port_start > port_end)
+    {
+        int tmp = port_start;
+        port_start = port_end;
+        port_end = tmp;
+    }
 	
 	/* Build the list of hosts to scan */
-	if ( (hosts = build_host_list(argc, argv, opt_index, &n)) == NULL)
+    if ( (hosts = build_host_list(argc, argv, opt_index, &n, port_start, port_end)) == NULL)
 	{
 		err ("There was an error getting the hosts to scan\n");
 		return PHSCAN_ERROR;
 	}
 
-	dbg("Starting port scanning in range [%d-%d], %zu host%s\n",
+    info("Starting port scanning in range [%d-%d], %zu host%s\n",
             port_start, port_end, n, n > 1 ? "s" : "");
 
-	arr = hosts;
-	
 	set_timer(&g_elapsed);
 	process_hosts(hosts, n, g_threads, port_start, port_end, g_socket_timeout);
     info("Done! Scanning took %.2f s.\n", get_elapsed_secs(&g_elapsed));
+
+    dump_host_info(hosts, port_start, port_end);
 
     free_host_list(hosts);
 
