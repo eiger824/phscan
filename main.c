@@ -18,6 +18,7 @@
 #include "time.h"
 #include "common.h"
 #include "colors.h"
+#include "threads.h"
 
 #define         PHSCAN_PROGNAME      "phscan"
 #define         PHSCAN_SIMPLE        0
@@ -113,29 +114,8 @@ int parse_ports(const char* str, int* port_start, int* port_end)
     return PHSCAN_RANGE;
 }
 
-size_t get_total_host_count(int argc, char* argv[], int opt_index)
-{
-    int i;
-    size_t total = 0;
-    size_t n;
-    for (i = opt_index; i < argc; ++i)
-    {
-        if ( is_ip(argv[i]) == 0)
-            total++;
-        else if ( is_subnet(argv[i]) == 0)
-        {
-            compute_ip_range(argv[i], NULL, &n);
-            total += n;
-        }
-        else
-            total++;
-    }
-    return total;
-}
-
 int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_end)
 {
-    int i;
     int port;
     size_t n;
     host_t** hosts;
@@ -153,40 +133,21 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
         usage(PHSCAN_PROGNAME);
         return PHSCAN_ERROR;
     }
+	
+	/* Build the list of hosts to scan */
+	if ( (hosts = build_host_list(argc, argv, opt_index, &n)) == NULL)
+	{
+		err ("There was an error getting the hosts to scan\n");
+		return PHSCAN_ERROR;
+	}
 
-    n = get_total_host_count(argc, argv, optind);
-
-    dbg("Starting port scanning in range [%d-%d], %zu host%s\n",
+	dbg("Starting port scanning in range [%d-%d], %zu host%s\n",
             port_start, port_end, n, n > 1 ? "s" : "");
 
-    set_timer(&g_elapsed);
-    // Loop through the hosts
-    for (i = opt_index; i < argc; ++i)
-    {
-        // argv[i] can either be one of:
-        //   => IP subnet  [no DNS]             [N elements]
-        //   => IP address [no DNS]             [1 element ]
-        //   => Host       [DNS lookup required][1 element ]
-    
-        // Iterate through these hosts
-        hosts = build_hosts_list(argv[i]);
-        arr = hosts;
-        for (h = *arr; h; h = *++arr)
-        {
-            info("%s%s%s (%s%s%s):\n",
-                    COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
-                    COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
-
-            for (port = port_start; port <= port_end; ++port)
-            {
-                if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
-                    dbg("  %5d: closed\n", port);
-                else
-                    info("  %s%5d: open%s\n",
-                            COLOR_IF(GREEN), port, COLOR_IF(RESET));
-            }
-        }
-    }
+	arr = hosts;
+	
+	set_timer(&g_elapsed);
+	process_hosts(hosts, n, g_threads, port_start, port_end, g_socket_timeout);
     info("Done! Scanning took %.2f s.\n", get_elapsed_secs(&g_elapsed));
 
     free_host_list(hosts);

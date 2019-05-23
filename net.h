@@ -9,11 +9,17 @@
 #define         MAX_INT_VAL     0xffffffff
 #define         MIN_INT_VAL     0x00000000
 
+struct port_info{
+	int portno;
+	int status; // 0=> closed, 1=> open
+}
+
 typedef struct host
 {
     char hostname[1024];
     char ip[16];
     int dns_err;
+	struct port_info pinfo;
 } host_t;
 
 /*
@@ -42,7 +48,7 @@ int is_ip(char* str);
 int is_subnet(char* str);
 int compute_ip_range(char* str, char* ip_start, size_t* count);
 
-host_t** build_hosts_list(char* str);
+host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n);
 void free_host_list(host_t** host_list);
 
 

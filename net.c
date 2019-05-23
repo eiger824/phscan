@@ -149,62 +149,103 @@ int do_dns_lookup(char * hostname , char* ip)
 
     return 1;
 }
-//TODO: return err/suceess, return list as arg
-host_t** build_hosts_list(char* str)
+
+static size_t get_total_host_count(int argc, char* argv[], int opt_index)
 {
-    host_t** out;
-    char ip[16];
-    if (is_ip(str) == 0)
+    int i;
+    size_t total = 0;
+    size_t n;
+    for (i = opt_index; i < argc; ++i)
     {
-        out = (host_t**) malloc (sizeof*out*2);
-        out[0] = (host_t*) malloc(sizeof(host_t));
-        strcpy(out[0]->hostname, str);
-        strcpy(out[0]->ip, str);
-        out[0]->dns_err = 0;
-        out[1] = NULL;
-    }
-    else if (is_subnet(str) == 0)
-    {
-        size_t count = 0;
-        uint32_t i;
-        char ip_start[16];
-        char ip_current[16];
-        if (compute_ip_range(str, ip_start, &count) != 0)
+        if ( is_ip(argv[i]) == 0)
+            total++;
+        else if ( is_subnet(argv[i]) == 0)
         {
-            out = (host_t**) malloc(sizeof*out);
-            out[0] = NULL;
-            return out;
+            compute_ip_range(argv[i], NULL, &n);
+            total += n;
         }
-        // Allocate a big array of 'count' ip addresses in the pool
-        out = (host_t**) malloc (sizeof*out * count);
-        uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
-        for (i = 0; i < count; ++i)
-        {
-            out[i] = (host_t*) malloc(sizeof(host_t));
-            out[i]->dns_err = 0;
-            // Translate this numeric repr into a readable IP address
-            bits_2_ipaddr(ip_start_bits + i, ip_current);
-            // Store this IP address in the corresponding struct
-            strcpy(out[i]->hostname, ip_current);
-            strcpy(out[i]->ip, ip_current);
-        }
+        else
+            total++;
     }
-    else
-    {
-        out = (host_t**) malloc (sizeof*out*2);
-        // Do DNS lookup
-        if (do_dns_lookup(str, ip) != 0) 
+    return total;
+}
+
+static host_t** alloc_n_hosts(size_t count)
+{
+	host_t** out;
+	
+	out = (host_t**) malloc (sizeof *out * count);
+	
+	return out;
+}
+
+static void add_new_host(host_t** list, size_t index, host_t* host)
+{
+	if (!list)
+		return;
+	list[index] = (host_t*) malloc (sizeof(host_t));
+	strcpy(list[index]->ip, host->ip);
+	strcpy(list[index]->hostname, host->hostname);
+	list[index]->dns_err = host->dns_err;
+}
+
+host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n)
+{
+	host_t** hosts;
+	int i;
+	size_t current = 0;
+	
+	if (!argv)
+		return NULL;
+	
+	*n = get_total_host_count(argc, argv, optind);
+	
+	hosts = alloc_n_hosts(*n + 1);
+	hosts[*n] = NULL;
+	
+	host_t h;
+	for (i = opt_index; i < argc; ++i)
+	{
+		if ( is_ip(argv[i]) == 0)
+		{
+			strcpy(h.ip, argv[i]);
+			strcpy(h.hostname, argv[i]);
+			h.dns_err = 0;
+			add_new_host(hosts, current++, &h);
+		}
+        else if ( is_subnet(argv[i]) == 0)
         {
-            out[0] = out[1] = NULL;
-            return out;
+			size_t k;
+			char ip_start[16];
+			char ip_current[16];
+            compute_ip_range(argv[i], ip_start, &k);
+			uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
+            for (size_t i = 0; i < k; ++i)
+			{
+				h.dns_err = 0;
+				// Translate this numeric repr into a readable IP address
+				bits_2_ipaddr(ip_start_bits + i, ip_current);
+				// Store this IP address in the corresponding struct
+				strcpy(h.hostname, ip_current);
+				strcpy(h.ip, ip_current);
+				// Add this host to the global list
+				add_new_host(hosts, current++, &h);
+			}
         }
-        out[0] = (host_t*) malloc(sizeof(host_t));
-        strcpy(out[0]->hostname, str);
-        strcpy(out[0]->ip, ip);
-        out[0]->dns_err = 0;
-        out[1] = NULL;
-    }
-    return out;
+        else
+		{
+			char ip[16];
+			
+			h.dns_err = do_dns_lookup(argv[i], ip);
+				
+			strcpy(h.ip, ip);
+			strcpy(h.hostname, argv[i]);
+			
+			add_new_host(hosts, current++, &h);
+		}
+	}
+	
+	return hosts;
 }
 
 void free_host_list(host_t** host_list)
