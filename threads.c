@@ -24,9 +24,6 @@ static void* thread_run(void* data)
 		{
 			if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
 			{
-				printf("\n\nConnect failed, about to crash...\n");
-				printf("h->pinfo => %p, current = %d, d->start = %d\n", (void*)h->pinfo, current, d->start);
-				printf("g_host_list => %p, h = %p\n", (void*)g_host_list, (void*)h);
                 h->pinfo[port - d->port_start].status = PHSCAN_PORT_CLOSED;
 			}
 			else
@@ -48,7 +45,7 @@ static void set_thread_data(tdata_t* data,
 	data->stop = stop;
 	data->port_start = port_start;
 	data->port_stop = port_stop;
-    printf("Thread ID #%d, IDX_start: %zu, IDX_end: %zu, Port start: %d, Port end: %d\n",
+    dbg("Thread ID #%d, IDX_start: %zu, IDX_end: %zu, Port start: %d, Port end: %d\n",
 		id, start, stop, port_start, port_stop);
 }
 
@@ -68,9 +65,11 @@ void process_hosts(host_t* host_list, size_t count,
 	
 	tdata_t arg[nthreads];
 	pthread_attr_init(&attr);
+
+//     orchestrate_workload(ntreads, port_stop - port_start + 1, count);
 	
 	// Number of "connections" to be done
-	items_per_thread = count * (port_stop - port_start + 1) / nthreads;
+	items_per_thread = count / nthreads;
 	
 	dbg("I will use %d thread%s for parallel processing, %zu hosts/thread\n",
 		nthreads, nthreads > 1 ? "s" : "",

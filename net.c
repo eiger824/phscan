@@ -179,15 +179,23 @@ static host_t* alloc_n_hosts(size_t count)
 	return out;
 }
 
-static void add_new_host(host_t* list, size_t index, host_t host)
+static void add_new_host(host_t* list, size_t index, host_t* host, uint16_t port_start, uint16_t port_stop)
 {
+    uint16_t i;
 	if (!list)
 		return;
 	
-	strcpy(list[index].ip, host.ip);
-	strcpy(list[index].hostname, host.hostname);
-	list[index].dns_err = host.dns_err;
-	memcpy(list[index].pinfo, host.pinfo, sizeof(struct port_info) * host.nports);
+    strcpy(list[index].ip, host->ip);
+    strcpy(list[index].hostname, host->hostname);
+    list[index].dns_err = host->dns_err;
+    list[index].pinfo =
+        (struct port_info*) malloc(sizeof(struct port_info) * host->nports);
+
+	for (i = port_start; i <= port_stop; ++i)
+	{
+        list[index].pinfo[i - port_start].portno = port_start;
+        list[index].pinfo[i - port_start].status = PHSCAN_PORT_CLOSED;
+	}
 }
 
 host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
@@ -206,14 +214,6 @@ host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
 	
 	host_t h;
 	h.nports = port_stop - port_start + 1;
-	// Ports are known
-	h.pinfo =
-		(struct port_info*) malloc(sizeof(struct port_info) * h.nports);
-	for (i = port_start; i <= port_stop; ++i)
-	{
-		h.pinfo[i - port_start].portno = i;
-		h.pinfo[i- port_start].status = 0; // Assume closed
-	}
 	for (i = opt_index; i < argc; ++i)
 	{
 		if ( is_ip(argv[i]) == 0 )
@@ -221,7 +221,7 @@ host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
 			strcpy(h.ip, argv[i]);
             strcpy(h.hostname, argv[i]);
 			h.dns_err = 0;
-			add_new_host(hosts, current++, h);
+            add_new_host(hosts, current++, &h, port_start, port_stop);
 		}
         else if ( is_subnet(argv[i]) == 0 )
         {
@@ -239,7 +239,7 @@ host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
 				strcpy(h.hostname, ip_current);
 				strcpy(h.ip, ip_current);
 				// Add this host to the global list
-                add_new_host(hosts, current++, h);
+                add_new_host(hosts, current++, &h, port_start, port_stop);
 			}
         }
         else
@@ -251,7 +251,7 @@ host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
 			strcpy(h.ip, ip);
 			strcpy(h.hostname, argv[i]);
 			
-            add_new_host(hosts, current++, h);
+            add_new_host(hosts, current++, &h, port_start, port_stop);
 		}
 	}
 	
