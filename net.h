@@ -11,7 +11,7 @@
 
 struct port_info
 {
-	int portno;
+	uint16_t portno;
 	int status; // 0=> closed, 1=> open
 };
 
@@ -21,6 +21,7 @@ typedef struct host
     char ip[16];
     int dns_err;
     struct port_info* pinfo;
+	size_t nports;
 } host_t;
 
 /*
@@ -49,10 +50,10 @@ int is_ip(char* str);
 int is_subnet(char* str);
 int compute_ip_range(char* str, char* ip_start, size_t* count);
 
-host_t** build_host_list(int argc, char** argv, int opt_index, size_t* n,
+host_t* build_host_list(int argc, char** argv, int opt_index, size_t* n,
         uint16_t port_start, uint16_t port_stop);
-void dump_host_info(host_t** host_list, uint16_t port_start, uint16_t port_end);
-void free_host_list(host_t** host_list);
+void dump_host_info(host_t* host_list, size_t n);
+void free_host_list(host_t* host_list, size_t n);
 
 
 #endif   /* __NET_H */

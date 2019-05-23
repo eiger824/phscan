@@ -117,7 +117,7 @@ int parse_ports(const char* str, int* port_start, int* port_end)
 int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_end)
 {
     size_t n;
-    host_t** hosts;
+    host_t* hosts;
 
     if (argc - opt_index == 0 || port_start == -1 || port_end == -1)
     {
@@ -152,9 +152,9 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
 	process_hosts(hosts, n, g_threads, port_start, port_end, g_socket_timeout);
     info("Done! Scanning took %.2f s.\n", get_elapsed_secs(&g_elapsed));
 
-    dump_host_info(hosts, port_start, port_end);
+    dump_host_info(hosts, n);
 
-    free_host_list(hosts);
+    free_host_list(hosts, n);
 
     return PHSCAN_SUCCESS;
 }

@@ -13,7 +13,7 @@ typedef struct thread_data {
 	size_t port_stop;
 } tdata_t;
 
-void process_hosts(host_t** host_list, size_t count,
+void process_hosts(host_t* host_list, size_t count,
 				size_t nthreads,
 				uint16_t port_start, uint16_t port_stop,
 				int socket_timeout);

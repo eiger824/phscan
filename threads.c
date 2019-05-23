@@ -6,7 +6,7 @@
 #include "colors.h"
 #include "common.h"
 
-static host_t** g_host_list;
+static host_t* g_host_list;
 static int g_socket_timeout;
 static int g_color = 1;
 
@@ -18,17 +18,20 @@ static void* thread_run(void* data)
 
 	for (current = d->start; current <= d->stop; ++current)
 	{
-		host_t* h = g_host_list[current];
+		host_t* h = &g_host_list[current];
 		// Loop through ports
 		for (port = d->port_start; port <= d->port_stop; ++port)
 		{
 			if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
 			{
-                h->pinfo[current - d->start].status = PHSCAN_PORT_CLOSED;
+				printf("\n\nConnect failed, about to crash...\n");
+				printf("h->pinfo => %p, current = %d, d->start = %d\n", (void*)h->pinfo, current, d->start);
+				printf("g_host_list => %p, h = %p\n", (void*)g_host_list, (void*)h);
+                h->pinfo[port - d->port_start].status = PHSCAN_PORT_CLOSED;
 			}
 			else
 			{
-                h->pinfo[current - d->start].status = PHSCAN_PORT_CLOSED;
+                h->pinfo[port - d->port_start].status = PHSCAN_PORT_OPEN;
 			}
 		}
 	}
@@ -49,7 +52,7 @@ static void set_thread_data(tdata_t* data,
 		id, start, stop, port_start, port_stop);
 }
 
-void process_hosts(host_t** host_list, size_t count,
+void process_hosts(host_t* host_list, size_t count,
 					size_t nthreads,
 					uint16_t port_start, uint16_t port_stop,
 					int socket_timeout)
@@ -60,6 +63,8 @@ void process_hosts(host_t** host_list, size_t count,
 	
 	g_host_list = host_list;
 	g_socket_timeout = socket_timeout;
+	
+	//dump_host_info(host_list, count);
 	
 	tdata_t arg[nthreads];
 	pthread_attr_init(&attr);
