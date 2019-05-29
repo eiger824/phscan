@@ -28,8 +28,6 @@
 #define         VERSION             0.2
 
 static struct timeval g_elapsed;
-static int g_color = 0;
-static int g_socket_timeout = 100; //ms
 static int g_threads = 1;
 
 void usage(char *program)
@@ -37,6 +35,7 @@ void usage(char *program)
     err(
             "USAGE: %s [hv|V] -p PORT1[[:-,]PORTN)] HOST1[/SUBNET | HOST2 ...])\n"
             "-c                     Show colorized output\n"
+            "                       Defaults to: %s\n"
             "-h                     Show this help and exit\n"
             "-j <threads>           Run the scan in parallel\n"
             "                       Note that for this machine, %d is the allowed maximum\n"
@@ -51,7 +50,8 @@ void usage(char *program)
             "Example usage 1: %s -p 20:30 -H 192.168.1.1\t\tDo a port scan from 20 to 30 on the given host\n"
             "Example usage 2: %s -p 80    -H 192.168.1.0/24\tDo a host scan in search for open port 80\n"
             "Example usage 3: %s -p 10,20 -H 192.168.1.0/24\tPerform both port and host scans\n"
-            , program, get_nprocs(), g_socket_timeout, program, program, program );
+            , program, get_color() ? "enabled":"disabled",
+            get_nprocs(), get_socket_timeout(), program, program, program );
 
 }
 void version(char *program)
@@ -113,39 +113,17 @@ int parse_ports(const char* str, int* port_start, int* port_end)
     return PHSCAN_RANGE;
 }
 
-size_t get_total_host_count(int argc, char* argv[], int opt_index)
+int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
 {
-    int i;
-    size_t total = 0;
     size_t n;
-    for (i = opt_index; i < argc; ++i)
-    {
-        if ( is_ip(argv[i]) == 0)
-            total++;
-        else if ( is_subnet(argv[i]) == 0)
-        {
-            compute_ip_range(argv[i], NULL, &n);
-            total += n;
-        }
-        else
-            total++;
-    }
-    return total;
-}
+    host_t* hosts;
+    char elapsed[128];
+    char rangestr[1024];
 
-int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_end)
-{
-    int i;
-    int port;
-    size_t n;
-    host_t** hosts;
-    host_t** arr;
-    host_t* h;
-
-    if (argc - opt_index == 0 || port_start == -1 || port_end == -1)
+    if (argc - opt_index == 0 || ports_set == -1)
     {
         err("Not enough input arguments: ");
-        if (port_start == -1 || port_end == -1)
+        if (ports_set == -1)
             err("Port or port range missing\n");
         else
             err("No hosts were provided for scanning\n");
@@ -154,42 +132,29 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
         return PHSCAN_ERROR;
     }
 
-    n = get_total_host_count(argc, argv, optind);
+    if ( (hosts = build_hosts_list(argc, argv, opt_index, &n ) ) == NULL)
+    {
+        err("There was an error building the host list to scan\n");
+        return 1;
+    }
 
-    dbg("Starting port scanning in range [%d-%d], %zu host%s\n",
-            port_start, port_end, n, n > 1 ? "s" : "");
+    get_range_str(rangestr);
+    dbg("Starting port scanning in range(s) [%s], %zu host%s\n",
+            rangestr, n, n > 1 ? "s" : "");
 
     set_timer(&g_elapsed);
-    // Loop through the hosts
-    for (i = opt_index; i < argc; ++i)
-    {
-        // argv[i] can either be one of:
-        //   => IP subnet  [no DNS]             [N elements]
-        //   => IP address [no DNS]             [1 element ]
-        //   => Host       [DNS lookup required][1 element ]
-    
-        // Iterate through these hosts
-        hosts = build_hosts_list(argv[i]);
-        arr = hosts;
-        for (h = *arr; h; h = *++arr)
-        {
-            info("%s%s%s (%s%s%s):\n",
-                    COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
-                    COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
 
-            for (port = port_start; port <= port_end; ++port)
-            {
-                if (connect_to_host(h->ip, port, g_socket_timeout) != 0)
-                    dbg("  %5d: closed\n", port);
-                else
-                    info("  %s%5d: open%s\n",
-                            COLOR_IF(GREEN), port, COLOR_IF(RESET));
-            }
-        }
-    }
-    info("Done! Scanning took %.2f s.\n", get_elapsed_secs(&g_elapsed));
+    process_hosts(hosts, n);
 
-    free_host_list(hosts);
+    stop_timer(&g_elapsed, elapsed);
+
+    info("Done! Scanning took %s.\n", elapsed);
+
+    // Print the hosts
+    print_scan_results(hosts, n);
+
+    free_host_list(hosts, n);
+    free_port_ranges();
 
     return PHSCAN_SUCCESS;
 }
@@ -198,10 +163,12 @@ int scan_hosts(int argc, char** argv, int opt_index, int port_start, int port_en
 int main(int argc , char **argv)
 {
     int c;
-    int port_start, port_end;
+    int port_start, port_end, ports_set;
 
     port_start = -1;
     port_end = -1;
+    ports_set = -1;
+
 
     // Allocate memory for host start and end
     while ((c = getopt(argc, argv, "chj:p:t:vV")) != -1)
@@ -209,7 +176,7 @@ int main(int argc , char **argv)
         switch (c)
         {
             case 'c':
-                g_color = 1;
+                set_color(1);
                 break;
             case 'h':
                 usage(PHSCAN_PROGNAME);
@@ -227,9 +194,11 @@ int main(int argc , char **argv)
             case 'p':
                 if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
                     die(usage, PHSCAN_PROGNAME, "Wrong port format\n");
+                add_port_range(port_start, port_end);
+                ports_set = 1;
                 break;
             case 't':
-                g_socket_timeout = atoi(optarg);
+                set_socket_timeout(atoi(optarg));
                 break;
             case 'v':
                 version(PHSCAN_PROGNAME);
@@ -245,5 +214,5 @@ int main(int argc , char **argv)
     }
 
     // Positional argument: hosts
-    return scan_hosts(argc, argv, optind, port_start, port_end);
+    return scan_hosts(argc, argv, optind, ports_set);
 } 

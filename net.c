@@ -16,6 +16,10 @@
 #include "net.h"
 #include "common.h"
 
+static int g_socket_timeout = 100; //ms
+static struct port_range* g_port_ranges = NULL;
+static size_t g_range_idx = 0;
+
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
     uint8_t first = ipaddr_bits >> 24;
@@ -70,8 +74,6 @@ int connect_to_host(char* host, uint16_t port, int msecs)
     {
         return 1;
     }
-    // Set this socket NON BLOCKING
-//     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -80,13 +82,12 @@ int connect_to_host(char* host, uint16_t port, int msecs)
 
     // Attempt connection to socket
     res = connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
-    
+
     if (res == -1)
     {
         // Check errno, should be EINPROGRESS
         if (errno != EINPROGRESS)
         {
-            err("Unexpected error: %d (%s)\n", errno, strerror(errno));
             close(sockfd);
             return 1;
         }
@@ -149,73 +150,158 @@ int do_dns_lookup(char * hostname , char* ip)
 
     return 1;
 }
-//TODO: return err/suceess, return list as arg
-host_t** build_hosts_list(char* str)
+
+static void add_new_host(host_t* list, size_t index, host_t* h)
 {
-    host_t** out;
+    if (!list)
+        return;
+
+    strcpy(list[index].hostname, h->hostname);
+    strcpy(list[index].ip, h->ip);
+    list[index].dns_err = h->dns_err;
+    list[index].pinfo = h->pinfo;
+    list[index].nports = h->nports;
+}
+
+static size_t get_total_host_count(int argc, char* argv[], int opt_index)
+{
+    int i;
+    size_t total = 0;
+    size_t n;
+    for (i = opt_index; i < argc; ++i)
+    {
+        if ( is_ip(argv[i]) == 0)
+            total++;
+        else if ( is_subnet(argv[i]) == 0)
+        {
+            compute_ip_range(argv[i], NULL, &n);
+            total += n;
+        }
+        else
+            total++;
+    }
+    return total;
+}
+
+static size_t get_total_port_count()
+{
+    size_t total = 0;
+    size_t i,j;
+    struct port_range* r;
+    for (i = 0; i < g_range_idx; ++i)
+    {
+        r = &g_port_ranges[i];
+        for (j = r->port_start; j<= r->port_stop; ++j)
+            total++;
+    }
+    return total;
+}
+
+static void fill_port_info(struct port_info* info)
+{
+    size_t i,j;
+    struct port_range* r;
+    size_t current = 0;
+    if (!info)
+        return;
+    for (i = 0; i < g_range_idx; ++i)
+    {
+        r = &g_port_ranges[i];
+        for (j = r->port_start; j<= r->port_stop; ++j)
+        {
+            info[current].portno = j;
+            info[current].status = PHSCAN_PORT_CLOSED;
+            current++;
+        }
+    }
+
+}
+
+static void dump_port_info(struct port_info* info, size_t n)
+{
+    if (!info)
+        return;
+    struct port_info* p;
+    for (size_t i = 0; i < n; ++i)
+    {
+        p = &info[i];
+        printf("Port: %u [status=%d]\n", p->portno, p->status);
+    }
+}
+
+host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
+{
+    host_t* out;
+    host_t new_host;
+    size_t current = 0;
     char ip[16];
-    if (is_ip(str) == 0)
+    char* str;
+    size_t k, i, port_count;
+
+    *count = get_total_host_count(argc, argv, opt_index);
+    port_count = get_total_port_count();
+
+    out = (host_t*) malloc (sizeof *out * *count);
+    new_host.dns_err = 0;
+    // Allocate the port information structure
+    new_host.pinfo =
+        (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+    new_host.nports = port_count;
+    fill_port_info(new_host.pinfo);
+
+    for (i = opt_index; i < argc; ++i)
     {
-        out = (host_t**) malloc (sizeof*out*2);
-        out[0] = (host_t*) malloc(sizeof(host_t));
-        strcpy(out[0]->hostname, str);
-        strcpy(out[0]->ip, str);
-        out[0]->dns_err = 0;
-        out[1] = NULL;
-    }
-    else if (is_subnet(str) == 0)
-    {
-        size_t count = 0;
-        uint32_t i;
-        char ip_start[16];
-        char ip_current[16];
-        if (compute_ip_range(str, ip_start, &count) != 0)
+        str = argv[i];
+        if (is_ip(str) == 0)
         {
-            out = (host_t**) malloc(sizeof*out);
-            out[0] = NULL;
-            return out;
+            strcpy(new_host.hostname, str);
+            strcpy(new_host.ip, str);
+            add_new_host(out, current++, &new_host);
         }
-        // Allocate a big array of 'count' ip addresses in the pool
-        out = (host_t**) malloc (sizeof*out * count);
-        uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
-        for (i = 0; i < count; ++i)
+        else if (is_subnet(str) == 0)
         {
-            out[i] = (host_t*) malloc(sizeof(host_t));
-            out[i]->dns_err = 0;
-            // Translate this numeric repr into a readable IP address
-            bits_2_ipaddr(ip_start_bits + i, ip_current);
-            // Store this IP address in the corresponding struct
-            strcpy(out[i]->hostname, ip_current);
-            strcpy(out[i]->ip, ip_current);
+            char ip_start[16];
+            char ip_current[16];
+            if (compute_ip_range(str, ip_start, &k) != 0)
+            {
+                return NULL;
+            }
+            // Allocate a big array of 'k' ip addresses in the pool
+            uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
+            for (i = 0; i < k; ++i)
+            {
+                // Translate this numeric repr into a readable IP address
+                bits_2_ipaddr(ip_start_bits + i, ip_current);
+                // Store this IP address in the corresponding struct
+                strcpy(new_host.hostname, ip_current);
+                strcpy(new_host.ip, ip_current);
+                add_new_host(out, current++, &new_host);
+            }
         }
-    }
-    else
-    {
-        out = (host_t**) malloc (sizeof*out*2);
-        // Do DNS lookup
-        if (do_dns_lookup(str, ip) != 0) 
+        else
         {
-            out[0] = out[1] = NULL;
-            return out;
+            // Do DNS lookup
+            new_host.dns_err = do_dns_lookup(str, ip);
+            if (new_host.dns_err != 0)
+                strcpy(new_host.hostname, ip);
+            else
+                strcpy(new_host.hostname, str);
+
+            strcpy(new_host.ip, ip);
+            add_new_host(out, current++, &new_host);
         }
-        out[0] = (host_t*) malloc(sizeof(host_t));
-        strcpy(out[0]->hostname, str);
-        strcpy(out[0]->ip, ip);
-        out[0]->dns_err = 0;
-        out[1] = NULL;
     }
     return out;
 }
 
-void free_host_list(host_t** host_list)
+void free_host_list(host_t* host_list, size_t n)
 {
-    host_t* current_host;
-    host_t** arr = host_list;
+    size_t i;
     if (!host_list)
         return;
 
-    for (current_host = *arr; current_host; current_host=*++arr)
-        free(current_host);
+    for (i = 0; i < n; ++i)
+        free(host_list[i].pinfo);
 
     free(host_list);
 }
@@ -272,4 +358,96 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
         bits_2_ipaddr(bits, ip_start);
 
     return 0;
+}
+
+void process_hosts(host_t* list, size_t n)
+{
+    port_t port;
+    host_t* h;
+    size_t i,j;
+    struct port_range* r;
+
+    if (!list)
+        return;
+    for (i = 0; i < n; ++i)
+    {
+        // Get the current host
+        h = &list[i];
+        // Go through all ranges
+        for (j = 0; j < g_range_idx; ++j)
+        {
+            // Go through current range
+            r = &g_port_ranges[j];
+            for (port = r->port_start; port <= r->port_stop; ++port)
+            {
+                if (connect_to_host(h->ip, port, g_socket_timeout) == PHSCAN_PORT_OPEN)
+                    h->pinfo[port - r->port_start].status = PHSCAN_PORT_OPEN;
+            }
+        }
+    }
+
+}
+
+void set_socket_timeout(int timeout)
+{
+    g_socket_timeout = timeout;
+}
+
+int get_socket_timeout()
+{
+    return g_socket_timeout;
+}
+
+void add_port_range(port_t start, port_t stop)
+{
+    struct port_range* r;
+    port_t tmp;
+    if (g_port_ranges == NULL)
+    {
+        g_port_ranges = (struct port_range*) malloc(sizeof *g_port_ranges * 1024);
+    }
+    r = &g_port_ranges[g_range_idx++];
+    if (stop < start)
+    {
+        tmp = start;
+        start = stop;
+        stop = tmp;
+    }
+    r->port_start = start;
+    r->port_stop = stop;
+}
+
+void free_port_ranges()
+{
+    if (g_port_ranges == NULL)
+        return;
+    free(g_port_ranges);
+}
+
+void print_port_ranges()
+{
+    size_t i;
+    for (i = 0; i < g_range_idx; ++i)
+    {
+        printf("[%d - %d]\n", g_port_ranges[i].port_start, g_port_ranges[i].port_stop);
+    }
+}
+
+void get_range_str(char* str)
+{
+    size_t i;
+    char current_range[16];
+    struct port_range* r;
+    if (!str)
+        return;
+    for (i = 0; i < g_range_idx; ++i)
+    {
+        r = &g_port_ranges[i];
+        if (r->port_start < r->port_stop)
+            sprintf(current_range, "[%d-%d]%s",
+                    r->port_start, r->port_stop, i < g_range_idx - 1 ? ", " : "");
+        else
+            sprintf(current_range, "[%d]%s", r->port_start, i < g_range_idx - 1 ? ", " : "");
+        strcat(str, current_range);
+    }
 }

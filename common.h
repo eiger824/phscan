@@ -3,6 +3,8 @@
 
 #include <stdarg.h>
 
+#include "net.h"
+
 #define     port_t  uint16_t
 
 void err(const char* msg, ...);
@@ -14,5 +16,8 @@ int regex_match(const char* str, const char* regex);
 char find_delim(const char* str);
 int verify_port(int port);
 void set_verbose(int verbose);
+void print_scan_results(host_t* hosts, size_t n);
+void set_color(int color);
+int get_color();
 
 #endif /* COMMON_H_ */
