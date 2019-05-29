@@ -31,9 +31,6 @@ ${PROGRAM}: ${OBJS}
 $(OUTPFX)/main.o: $(SRCS)
 	${CC} ${CFLAGS} $< -o $@
 
-$(OUTPFX)/net.o: $(NETPFX)/net.c $(NETPFX)/net.h
-	${CC} ${CFLAGS} $< -o $@
-
 $(OUTPFX)/%.o: %.c %.h
 	${CC} ${CFLAGS} $< -o $@
 
