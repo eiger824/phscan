@@ -3,7 +3,12 @@
 
 #include <stdarg.h>
 
-#include "net.h"
+#define         PHSCAN_PROGNAME      "phscan"
+#define         PHSCAN_SIMPLE        0
+#define         PHSCAN_SUCCESS       0
+#define         PHSCAN_ERROR         1
+
+#define         PHSCAN_VERSION       0.2
 
 #define     port_t  uint16_t
 
@@ -16,7 +21,6 @@ int regex_match(const char* str, const char* regex);
 char find_delim(const char* str);
 int verify_port(int port);
 void set_verbose(int verbose);
-void print_scan_results(host_t* hosts, size_t n);
 void set_color(int color);
 int get_color();
 

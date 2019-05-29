@@ -19,18 +19,10 @@
 #include "common.h"
 #include "colors.h"
 
-#define         PHSCAN_PROGNAME      "phscan"
-#define         PHSCAN_SIMPLE        0
-#define         PHSCAN_SUCCESS       0
-#define         PHSCAN_ERROR         1
-#define         PHSCAN_RANGE         2
-
-#define         VERSION             0.2
-
 static struct timeval g_elapsed;
 static int g_threads = 1;
 
-void usage(char *program)
+static void usage(char *program)
 {
     err(
             "USAGE: %s [hv|V] -p PORT1[[:-,]PORTN)] HOST1[/SUBNET | HOST2 ...])\n"
@@ -54,34 +46,13 @@ void usage(char *program)
             get_nprocs(), get_socket_timeout(), program, program, program );
 
 }
-void version(char *program)
+static void version(char *program)
 {
     err("%s - version v%.2f, developed by eiger824\n",
-            program, VERSION);
+            program, PHSCAN_VERSION);
 }
 
-int check_optarg_valid(const char* str, char delim)
-{
-    char *tmp;
-    if ((tmp = strchr(str, delim)) != NULL) // Range char was provided
-    {
-        if (tmp == str || tmp == str + strlen(str) + 1)
-        {
-            return PHSCAN_ERROR;
-        }
-        else
-        {
-            return PHSCAN_RANGE;
-        }
-    }
-    else
-    {
-        if (!strlen(str)) return PHSCAN_ERROR;
-        else return PHSCAN_SIMPLE;
-    }
-}
-
-int parse_ports(const char* str, int* port_start, int* port_end)
+static int parse_ports(const char* str, int* port_start, int* port_end)
 {
     char delim;
     char* p;
@@ -95,25 +66,28 @@ int parse_ports(const char* str, int* port_start, int* port_end)
         *port_start = atoi(str);
         *port_end = *port_start; 
         if (verify_port(*port_start) || verify_port(*port_end))
-            return PHSCAN_RANGE;
+            return PHSCAN_ERROR;
         return PHSCAN_SUCCESS;
     }
 
     if (regex_match(str, "^[0-9]+[[:blank:]]*([,-:][[:blank:]]*[0-9]+)?$") == 0)
     {
         delim = find_delim(str);
+	if (delim != ',' && delim != '-' && delim != ':')
+	    return PHSCAN_ERROR;
+
         *port_start = atoi(str);
         p = strchr(str, delim);
         *port_end = atoi(++p);
         if (verify_port(*port_start) || verify_port(*port_end))
-            return PHSCAN_RANGE;
+            return PHSCAN_ERROR;
         return PHSCAN_SUCCESS;
     }
 
-    return PHSCAN_RANGE;
+    return PHSCAN_ERROR;
 }
 
-int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
+static int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
 {
     size_t n;
     host_t* hosts;
@@ -139,7 +113,7 @@ int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
     }
 
     get_range_str(rangestr);
-    dbg("Starting port scanning in range(s) [%s], %zu host%s\n",
+    dbg("Starting port scanning in range(s) %s, %zu host%s\n",
             rangestr, n, n > 1 ? "s" : "");
 
     set_timer(&g_elapsed);
@@ -193,7 +167,7 @@ int main(int argc , char **argv)
                 break;
             case 'p':
                 if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
-                    die(usage, PHSCAN_PROGNAME, "Wrong port format\n");
+                    die(usage, PHSCAN_PROGNAME, "Wrong port format `%s'\n", optarg);
                 add_port_range(port_start, port_end);
                 ports_set = 1;
                 break;

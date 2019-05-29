@@ -6,7 +6,6 @@
 #include <regex.h>
 
 #include "common.h"
-#include "colors.h"
 
 static int g_verbose = 0;
 static int g_color = 0;
@@ -31,7 +30,7 @@ void die(void (*usage_fun)(char*), char* program, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    err(msg, args);
+    vfprintf(stderr, msg, args);
     va_end(args);
     usage_fun(program);
     exit(1);
@@ -104,35 +103,6 @@ int verify_port(int port)
 void set_verbose(int verbose)
 {
     g_verbose = verbose;
-}
-
-void print_scan_results(host_t* hosts, size_t n)
-{
-    size_t i;
-    port_t portidx, port;
-    int status;
-    host_t* h;
-    if (!hosts)
-        return;
-
-    for (i = 0; i < n; ++i)
-    {
-        h = &hosts[i];
-        info("%s%s%s (%s%s%s):\n",
-                COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
-                COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
-
-        for (portidx = 0; portidx < h->nports; ++portidx)
-        {
-            port = h->pinfo[portidx].portno;
-            status = h->pinfo[portidx].status;
-            if (status == PHSCAN_PORT_CLOSED)
-                dbg("  %5d: closed\n", port);
-            else
-                info("  %s%5d: open%s\n",
-                        COLOR_IF(GREEN), port, COLOR_IF(RESET));
-        }
-    }
 }
 
 void set_color(int color)

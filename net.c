@@ -15,6 +15,7 @@
 
 #include "net.h"
 #include "common.h"
+#include "colors.h"
 
 static int g_socket_timeout = 100; //ms
 static struct port_range* g_port_ranges = NULL;
@@ -217,18 +218,6 @@ static void fill_port_info(struct port_info* info)
 
 }
 
-static void dump_port_info(struct port_info* info, size_t n)
-{
-    if (!info)
-        return;
-    struct port_info* p;
-    for (size_t i = 0; i < n; ++i)
-    {
-        p = &info[i];
-        printf("Port: %u [status=%d]\n", p->portno, p->status);
-    }
-}
-
 host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
 {
     host_t* out;
@@ -236,7 +225,8 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
     size_t current = 0;
     char ip[16];
     char* str;
-    size_t k, i, port_count;
+    size_t j, k, port_count;
+    int i;
 
     *count = get_total_host_count(argc, argv, opt_index);
     port_count = get_total_port_count();
@@ -244,10 +234,8 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
     out = (host_t*) malloc (sizeof *out * *count);
     new_host.dns_err = 0;
     // Allocate the port information structure
-    new_host.pinfo =
-        (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+    dbg("Port_count = %zu, %zu hosts\n", port_count, *count);
     new_host.nports = port_count;
-    fill_port_info(new_host.pinfo);
 
     for (i = opt_index; i < argc; ++i)
     {
@@ -256,6 +244,9 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
         {
             strcpy(new_host.hostname, str);
             strcpy(new_host.ip, str);
+            new_host.pinfo =
+                (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+            fill_port_info(new_host.pinfo);
             add_new_host(out, current++, &new_host);
         }
         else if (is_subnet(str) == 0)
@@ -268,13 +259,16 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
             }
             // Allocate a big array of 'k' ip addresses in the pool
             uint32_t ip_start_bits = ipaddr_2_bits(ip_start);
-            for (i = 0; i < k; ++i)
+            for (j = 0; j < k; ++j)
             {
                 // Translate this numeric repr into a readable IP address
-                bits_2_ipaddr(ip_start_bits + i, ip_current);
+                bits_2_ipaddr(ip_start_bits + j, ip_current);
                 // Store this IP address in the corresponding struct
                 strcpy(new_host.hostname, ip_current);
                 strcpy(new_host.ip, ip_current);
+                new_host.pinfo =
+                    (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+                fill_port_info(new_host.pinfo);
                 add_new_host(out, current++, &new_host);
             }
         }
@@ -288,22 +282,13 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
                 strcpy(new_host.hostname, str);
 
             strcpy(new_host.ip, ip);
+            new_host.pinfo =
+                (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+            fill_port_info(new_host.pinfo);
             add_new_host(out, current++, &new_host);
         }
     }
     return out;
-}
-
-void free_host_list(host_t* host_list, size_t n)
-{
-    size_t i;
-    if (!host_list)
-        return;
-
-    for (i = 0; i < n; ++i)
-        free(host_list[i].pinfo);
-
-    free(host_list);
 }
 
 int is_ip(char* str)
@@ -365,6 +350,7 @@ void process_hosts(host_t* list, size_t n)
     port_t port;
     host_t* h;
     size_t i,j;
+    size_t current;
     struct port_range* r;
 
     if (!list)
@@ -373,6 +359,7 @@ void process_hosts(host_t* list, size_t n)
     {
         // Get the current host
         h = &list[i];
+	current = 0;
         // Go through all ranges
         for (j = 0; j < g_range_idx; ++j)
         {
@@ -380,12 +367,45 @@ void process_hosts(host_t* list, size_t n)
             r = &g_port_ranges[j];
             for (port = r->port_start; port <= r->port_stop; ++port)
             {
-                if (connect_to_host(h->ip, port, g_socket_timeout) == PHSCAN_PORT_OPEN)
-                    h->pinfo[port - r->port_start].status = PHSCAN_PORT_OPEN;
-            }
+                if (connect_to_host(h->ip, port, g_socket_timeout) != PHSCAN_PORT_OPEN)
+                    h->pinfo[current].status = PHSCAN_PORT_CLOSED;
+		else
+                    h->pinfo[current].status = PHSCAN_PORT_OPEN;
+
+		current++;
+           }
         }
     }
 
+}
+
+void print_scan_results(host_t* hosts, size_t n)
+{
+    size_t i;
+    port_t portidx, port;
+    int status;
+    host_t* h;
+    if (!hosts)
+        return;
+
+    for (i = 0; i < n; ++i)
+    {
+        h = &hosts[i];
+        info("%s%s%s (%s%s%s):\n",
+                COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
+                COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
+
+        for (portidx = 0; portidx < h->nports; ++portidx)
+        {
+            port = h->pinfo[portidx].portno;
+            status = h->pinfo[portidx].status;
+            if (status != PHSCAN_PORT_OPEN)
+                dbg("  %5d: closed\n", port);
+            else
+                info("  %s%5d: open%s\n",
+                        COLOR_IF(GREEN), port, COLOR_IF(RESET));
+        }
+    }
 }
 
 void set_socket_timeout(int timeout)
@@ -402,9 +422,10 @@ void add_port_range(port_t start, port_t stop)
 {
     struct port_range* r;
     port_t tmp;
-    if (g_port_ranges == NULL)
+    if (g_range_idx == 0)
     {
-        g_port_ranges = (struct port_range*) malloc(sizeof *g_port_ranges * 1024);
+        g_port_ranges =
+	    (struct port_range*) malloc(sizeof (struct port_range) * 1024);
     }
     r = &g_port_ranges[g_range_idx++];
     if (stop < start)
@@ -415,6 +436,18 @@ void add_port_range(port_t start, port_t stop)
     }
     r->port_start = start;
     r->port_stop = stop;
+}
+
+void free_host_list(host_t* host_list, size_t n)
+{
+    size_t i;
+    if (!host_list)
+        return;
+
+    for (i = 0; i < n; ++i)
+        free(host_list[i].pinfo);
+
+    free(host_list);
 }
 
 void free_port_ranges()
@@ -438,6 +471,7 @@ void get_range_str(char* str)
     size_t i;
     char current_range[16];
     struct port_range* r;
+    memset(str, 0, 1024);
     if (!str)
         return;
     for (i = 0; i < g_range_idx; ++i)

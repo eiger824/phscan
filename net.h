@@ -63,6 +63,7 @@ int compute_ip_range(char* str, char* ip_start, size_t* count);
 host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count);
 void free_host_list(host_t* host_list, size_t n);
 void process_hosts(host_t* list, size_t n);
+void print_scan_results(host_t* hosts, size_t n);
 
 int get_socket_timeout();
 void set_socket_timeout(int timeout);

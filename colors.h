@@ -10,6 +10,6 @@
 #define     CYAN    "\x1b[36m"
 #define     RESET   "\x1b[0m"
 
-#define     COLOR_IF(X) g_color ? X : ""
+#define     COLOR_IF(X) get_color() ? X : ""
 
 #endif  /* __COLORS_H_ */
