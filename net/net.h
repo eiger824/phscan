@@ -71,6 +71,8 @@ void free_host_list(host_t* host_list, size_t n);
 void process_hosts(host_t* list, size_t n);
 void print_scan_results(host_t* hosts, size_t n);
 
+int get_local_ip(const char* iface, char* ip);
+
 int get_socket_timeout();
 void set_socket_timeout(int timeout);
 

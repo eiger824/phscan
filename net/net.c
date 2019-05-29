@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <regex.h>
+#include <ifaddrs.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -410,6 +411,56 @@ void print_scan_results(host_t* hosts, size_t n)
                         COLOR_IF(GREEN), port, COLOR_IF(RESET));
         }
     }
+}
+
+int get_local_ip(const char* iface, char* ip)
+{
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s, n;
+    char host[NI_MAXHOST];
+    int found = 0;
+
+    if (!iface || !ip)
+        return 1;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+    for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        if (strcmp(ifa->ifa_name, iface) != 0)
+            continue;
+
+        if (family == AF_INET || family == AF_INET6) {
+            s = getnameinfo(ifa->ifa_addr,
+                    (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                    sizeof(struct sockaddr_in6),
+                    host, NI_MAXHOST,
+                    NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+
+            // Success! We found an IP for this interface, break now from loop
+            strcpy(ip, host);
+            found = 1;
+            break;
+        } 
+    }
+
+    freeifaddrs(ifaddr);
+
+    if (found != 1)
+        strcpy(ip, "??");
+
+    return !found;
 }
 
 void set_socket_timeout(int timeout)
