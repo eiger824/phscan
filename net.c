@@ -72,7 +72,7 @@ int connect_to_host(char* host, uint16_t port, int msecs)
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
     {
-        return 1;
+        return 2;
     }
 
     memset(&servaddr, 0, sizeof(servaddr));
@@ -89,7 +89,7 @@ int connect_to_host(char* host, uint16_t port, int msecs)
         if (errno != EINPROGRESS)
         {
             close(sockfd);
-            return 1;
+            return PHSCAN_PORT_CLOSED;
         }
 
         FD_ZERO(&wfd);
@@ -107,23 +107,23 @@ int connect_to_host(char* host, uint16_t port, int msecs)
         {
             // ERROR ocurred => unsuccessful
             close(sockfd);
-            return 2;
+            return PHSCAN_PORT_CLOSED;
         }
         else if (res == 1)
         {
             // SUCCESS
             close(sockfd);
-            return 0;
+            return PHSCAN_PORT_OPEN;
         }
         else
         {
             // Connect timed out => error happened
             close(sockfd);
-            return 3;
+            return PHSCAN_PORT_CLOSED;
         }
     }
     close(sockfd);
-    return 0;
+    return PHSCAN_PORT_OPEN;
 }
 
 int do_dns_lookup(char * hostname , char* ip)
