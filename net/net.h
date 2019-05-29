@@ -81,4 +81,6 @@ void print_port_ranges();
 void get_range_str(char* str);
 void free_port_ranges();
 
+void net_cleanup(host_t* host_list, size_t n);
+
 #endif   /* __NET_H */

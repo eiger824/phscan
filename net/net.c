@@ -282,15 +282,21 @@ host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
             // Do DNS lookup
             new_host.dns_err = do_dns_lookup(str, ip);
             if (new_host.dns_err != 0)
-                strcpy(new_host.hostname, ip);
+            {
+                err("Error: Could not resolve host `%s'\n", str);
+                free(out);
+                out = NULL;
+            }
             else
+            {
                 strcpy(new_host.hostname, str);
 
-            strcpy(new_host.ip, ip);
-            new_host.pinfo =
-                (struct port_info*) malloc(sizeof(struct port_info) * port_count);
-            fill_port_info(new_host.pinfo);
-            add_new_host(out, current++, &new_host);
+                strcpy(new_host.ip, ip);
+                new_host.pinfo =
+                    (struct port_info*) malloc(sizeof(struct port_info) * port_count);
+                fill_port_info(new_host.pinfo);
+                add_new_host(out, current++, &new_host);
+            }
         }
     }
     return out;
@@ -420,7 +426,7 @@ int get_local_ip(const char* iface, char* ip)
     char host[NI_MAXHOST];
     int found = 0;
 
-    if (!iface || !ip)
+    if (!ip)
         return 1;
 
     if (getifaddrs(&ifaddr) == -1) {
@@ -428,22 +434,27 @@ int get_local_ip(const char* iface, char* ip)
         exit(EXIT_FAILURE);
     }
 
-    for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++) {
+    for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++)
+    {
         if (ifa->ifa_addr == NULL)
             continue;
 
         family = ifa->ifa_addr->sa_family;
 
-        if (strcmp(ifa->ifa_name, iface) != 0)
+        if (iface != NULL && strcmp(ifa->ifa_name, iface) != 0)
+            continue;
+        if (iface == NULL && strcmp(ifa->ifa_name, "lo") == 0)
             continue;
 
-        if (family == AF_INET || family == AF_INET6) {
+        if (family == AF_INET || family == AF_INET6)
+        {
             s = getnameinfo(ifa->ifa_addr,
                     (family == AF_INET) ? sizeof(struct sockaddr_in) :
                     sizeof(struct sockaddr_in6),
                     host, NI_MAXHOST,
                     NULL, 0, NI_NUMERICHOST);
-            if (s != 0) {
+            if (s != 0)
+            {
                 printf("getnameinfo() failed: %s\n", gai_strerror(s));
                 exit(EXIT_FAILURE);
             }
@@ -539,4 +550,10 @@ void get_range_str(char* str)
             sprintf(current_range, "[%d]%s", r->port_start, i < g_range_idx - 1 ? ", " : "");
         strcat(str, current_range);
     }
+}
+
+void net_cleanup(host_t* host_list, size_t n)
+{
+    free_host_list(host_list, n);
+    free_port_ranges();
 }

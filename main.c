@@ -109,6 +109,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
     if ( (hosts = build_hosts_list(argc, argv, opt_index, &n ) ) == NULL)
     {
         err("There was an error building the host list to scan\n");
+        net_cleanup(hosts, n);
         return 1;
     }
 
@@ -127,8 +128,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
     // Print the hosts
     print_scan_results(hosts, n);
 
-    free_host_list(hosts, n);
-    free_port_ranges();
+    net_cleanup(hosts, n);
 
     return PHSCAN_SUCCESS;
 }

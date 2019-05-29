@@ -1,5 +1,5 @@
 PROGRAM     = phscan
-CFLAGS      = -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g -I.
+CFLAGS      = -c -I. -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
 LDFLAGS     = -fPIC -lm
 CC          := gcc
 OUTPFX      := build
