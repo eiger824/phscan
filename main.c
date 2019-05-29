@@ -39,9 +39,9 @@ static void usage(char *program)
             "\nNote 1: The port range shall be applied using one the following formats: \"start:end\"\n"
             "\"start-end\" or \"start,end\"\n"
             "Note 2: Subnets shall be specified using CIDR notation: \"SUBNET/MASK\"\n\n"
-            "Example usage 1: %s -p 20:30 -H 192.168.1.1\t\tDo a port scan from 20 to 30 on the given host\n"
-            "Example usage 2: %s -p 80    -H 192.168.1.0/24\tDo a host scan in search for open port 80\n"
-            "Example usage 3: %s -p 10,20 -H 192.168.1.0/24\tPerform both port and host scans\n"
+            "Example usage 1: %s -p 20:30  192.168.1.1\t\tDo a port scan from 20 to 30 on the given host\n"
+            "Example usage 2: %s -p 80     192.168.1.0/24\tDo a host scan in search for open port 80\n"
+            "Example usage 3: %s -p 10,20  192.168.1.0/24\tPerform both port and host scans\n"
             , program, get_color() ? "enabled":"disabled",
             get_nprocs(), get_socket_timeout(), program, program, program );
 
