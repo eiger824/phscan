@@ -14,7 +14,7 @@
 #include <limits.h>
 #include <regex.h>
 
-#include "net.h"
+#include "net/net.h"
 #include "time.h"
 #include "common.h"
 #include "colors.h"

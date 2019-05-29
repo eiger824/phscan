@@ -14,6 +14,8 @@
 #include <arpa/inet.h>
 
 #include "net.h"
+#include "scan/tcpconnect.h"
+
 #include "common.h"
 #include "colors.h"
 
@@ -64,6 +66,7 @@ uint32_t ipaddr_2_bits(char *ip)
     return out;
 }
 
+/*
 int connect_to_host(char* host, uint16_t port, int msecs)
 {
     struct sockaddr_in servaddr;
@@ -126,6 +129,7 @@ int connect_to_host(char* host, uint16_t port, int msecs)
     close(sockfd);
     return PHSCAN_PORT_OPEN;
 }
+*/
 
 int do_dns_lookup(char * hostname , char* ip)
 {

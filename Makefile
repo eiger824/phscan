@@ -1,35 +1,41 @@
 PROGRAM 	= phscan
-CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
+CFLAGS		= -c -Wall -Wextra -Wpedantic -fPIC -std=c11 -g -I.
 LDFLAGS		= -fPIC -lm
 CC			:= gcc
-OUTDIR 		:= build
+OUTPFX 		:= build
+NETPFX 		:= net
 
 SRCS 		:= main.c colors.h \
-				net.c net.h \
 				common.c common.h \
-				time.c time.h
+				time.c time.h \
+				$(NETPFX)/net.c $(NETPFX)/net.h \
+				$(NETPFX)/scan/tcpconnect.c $(NETPFX)/scan/tcpconnect.h
 
-OBJS 		:= main.o net.o time.o common.o
+OBJS 		:= main.o time.o common.o
+include net/Makefile
 
-OBJS := $(addprefix $(OUTDIR)/, $(OBJS))
-PROGRAM := $(addprefix $(OUTDIR)/, $(PROGRAM))
+OBJS := $(addprefix $(OUTPFX)/, $(OBJS))
+PROGRAM := $(addprefix $(OUTPFX)/, $(PROGRAM))
 
 
-all: $(OUTDIR) $(PROGRAM)
+all: $(OUTPFX) $(PROGRAM)
 
-$(OUTDIR):
-	test -d $@ || mkdir $@
+$(OUTPFX):
+	mkdir -p $@/net/scan
 
 ${PROGRAM}: ${OBJS}
 	${CC} $^ ${LDFLAGS} -o $@
 	rm -f $(shell basename $@)
 	ln -s $(PROGRAM)
 
-$(OUTDIR)/main.o: $(SRCS)
+$(OUTPFX)/main.o: $(SRCS)
 	${CC} ${CFLAGS} $< -o $@
 
-$(OUTDIR)/%.o: %.c %.h
+$(OUTPFX)/net.o: $(NETPFX)/net.c $(NETPFX)/net.h
+	${CC} ${CFLAGS} $< -o $@
+
+$(OUTPFX)/%.o: %.c %.h
 	${CC} ${CFLAGS} $< -o $@
 
 clean:
-	rm -rf $(OUTDIR) $(shell basename $(PROGRAM)) *~
+	rm -rf $(OUTPFX) $(shell basename $(PROGRAM)) *~

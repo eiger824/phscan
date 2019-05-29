@@ -13,6 +13,12 @@
 #define         PHSCAN_PORT_CLOSED      0
 #define         PHSCAN_PORT_OPEN        1
 
+typedef enum scan_type
+{
+    TCP_CONNECT = 0,
+    TCP_HALF_OPEN,
+} scan_type_t;
+
 struct port_info
 {
     port_t portno;
@@ -54,7 +60,7 @@ int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip);
 */
 uint32_t ipaddr_2_bits(char *ipaddr_str);
 
-int connect_to_host(char* host, uint16_t port, int msecs);
+// int connect_to_host(char* host, uint16_t port, int msecs);
 int do_dns_lookup(char * hostname , char* ip);
 int is_ip(char* str);
 int is_subnet(char* str);
