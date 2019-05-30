@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <errno.h>
 
-#include "net/net.h"
+#include "net.h"
 
 int connect_to_host(char* host, uint16_t port, int msecs);
 
