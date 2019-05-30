@@ -326,7 +326,7 @@ void process_hosts(host_t* list, size_t n)
                 else
                     h->pinfo[current].status = PHSCAN_PORT_OPEN;
 
-                notify_progress(task++, total_tasks);
+                notify_progress(++task, total_tasks);
 
                 current++;
             }

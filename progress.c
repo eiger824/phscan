@@ -4,6 +4,7 @@
 
 #include "progress.h"
 #include "common.h"
+#include "colors.h"
 
 size_t g_width;
 const char* g_header;
@@ -36,11 +37,12 @@ void set_bar(size_t progress, const char* delim)
     for (i = 0; i < g_width; ++i)
     {
         if (i < progress)
-            printf("|");
+            printf("%s|", COLOR_IF(YELLOW));
         else
-            printf(".");
+            printf("%s.", COLOR_IF(BLUE));
     }
-    printf("] %.2f%%%s",
+    printf("%s] %.2f%%%s",
+            COLOR_IF(RESET),
             ((float)progress / (float) g_width) * 100,
             delim);
     fflush(stdout);
