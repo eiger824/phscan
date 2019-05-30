@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "colors.h"
+#include "progress.h"
 
 static int g_socket_timeout = 100; //ms
 static struct port_range* g_port_ranges = NULL;
@@ -66,71 +67,6 @@ uint32_t ipaddr_2_bits(char *ip)
 
     return out;
 }
-
-/*
-int connect_to_host(char* host, uint16_t port, int msecs)
-{
-    struct sockaddr_in servaddr;
-    int sockfd;
-    int res;
-    fd_set wfd,rfd;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
-    {
-        return 2;
-    }
-
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(host);
-    servaddr.sin_port = htons(port);
-
-    // Attempt connection to socket
-    res = connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
-
-    if (res == -1)
-    {
-        // Check errno, should be EINPROGRESS
-        if (errno != EINPROGRESS)
-        {
-            close(sockfd);
-            return PHSCAN_PORT_CLOSED;
-        }
-
-        FD_ZERO(&wfd);
-        FD_SET(sockfd, &wfd);
-        FD_ZERO(&rfd);
-        FD_SET(sockfd, &rfd);
-
-        // Set out desired timeout
-        struct timeval tv;
-        tv.tv_sec = msecs / 1e3;
-        tv.tv_usec = msecs * 1e3;
-
-        res = select(sockfd +1, &rfd, &wfd, NULL, &tv);
-        if (res == -1)
-        {
-            // ERROR ocurred => unsuccessful
-            close(sockfd);
-            return PHSCAN_PORT_CLOSED;
-        }
-        else if (res == 1)
-        {
-            // SUCCESS
-            close(sockfd);
-            return PHSCAN_PORT_OPEN;
-        }
-        else
-        {
-            // Connect timed out => error happened
-            close(sockfd);
-            return PHSCAN_PORT_CLOSED;
-        }
-    }
-    close(sockfd);
-    return PHSCAN_PORT_OPEN;
-}
-*/
 
 int do_dns_lookup(char * hostname , char* ip)
 {
@@ -360,17 +296,24 @@ void process_hosts(host_t* list, size_t n)
 {
     port_t port;
     host_t* h;
-    size_t i,j;
-    size_t current;
+    size_t i,j, current, task, total_tasks;
     struct port_range* r;
 
     if (!list)
         return;
+
+    task = 0; 
+    total_tasks = n * get_total_port_count();
+
+    // For the animation
+    set_bar_length();
+    set_bar_header("Progress: ");
+
     for (i = 0; i < n; ++i)
     {
         // Get the current host
         h = &list[i];
-	current = 0;
+        current = 0;
         // Go through all ranges
         for (j = 0; j < g_range_idx; ++j)
         {
@@ -380,11 +323,13 @@ void process_hosts(host_t* list, size_t n)
             {
                 if (connect_to_host(h->ip, port, g_socket_timeout) != PHSCAN_PORT_OPEN)
                     h->pinfo[current].status = PHSCAN_PORT_CLOSED;
-		else
+                else
                     h->pinfo[current].status = PHSCAN_PORT_OPEN;
 
-		current++;
-           }
+                notify_progress(task++, total_tasks);
+
+                current++;
+            }
         }
     }
 
@@ -491,7 +436,7 @@ void add_port_range(port_t start, port_t stop)
     if (g_range_idx == 0)
     {
         g_port_ranges =
-	    (struct port_range*) malloc(sizeof (struct port_range) * 1024);
+            (struct port_range*) malloc(sizeof (struct port_range) * 1024);
     }
     r = &g_port_ranges[g_range_idx++];
     if (stop < start)

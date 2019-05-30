@@ -105,6 +105,11 @@ void set_verbose(int verbose)
     g_verbose = verbose;
 }
 
+int get_verbose()
+{
+    return g_verbose;
+}
+
 void set_color(int color)
 {
     g_color = color;
@@ -114,3 +119,4 @@ int get_color()
 {
     return g_color;
 }
+

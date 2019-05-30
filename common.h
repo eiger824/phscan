@@ -1,6 +1,7 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <stdio.h>
 #include <stdarg.h>
 
 #define         PHSCAN_PROGNAME      "phscan"
@@ -21,6 +22,7 @@ int regex_match(const char* str, const char* regex);
 char find_delim(const char* str);
 int verify_port(int port);
 void set_verbose(int verbose);
+int get_verbose();
 void set_color(int color);
 int get_color();
 
