@@ -325,7 +325,7 @@ void* thread_run (void* arg)
     size_t i;
     int v = get_verbose();
 
-    for (i = d->idx_start; i < d->idx_stop; ++i)
+    for (i = d->idx_start; i <= d->idx_stop; ++i)
     {
         // Get the current host
         c = &g_conns[i];
