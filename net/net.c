@@ -200,11 +200,13 @@ static port_t* build_port_list(size_t n)
     return out;
 }
 
-int build_tasks_list(int argc, char** argv, int opt_index, size_t* count)
+int build_tasks_list(int argc, char** argv, int opt_index)
 {
     struct connection *current;
-    size_t port_count, ip_count, i, k=0;
+    size_t port_count, ip_count, i, count, k=0;
     char **ip_list, **c, *ip;
+    char rangestr[1024];
+
     port_t* port_list;
 
     ip_count = get_total_host_count(argc, argv, opt_index);
@@ -215,10 +217,15 @@ int build_tasks_list(int argc, char** argv, int opt_index, size_t* count)
     port_list = build_port_list(port_count);
 
     // Total number of tasks: #hosts * #ports
-    *count = ip_count * port_count;
-    g_conn_count = *count;
+    count = ip_count * port_count;
+    g_conn_count = count;
 
-    g_conns = (struct connection* ) malloc (sizeof(struct connection) * *count);
+    get_range_str(rangestr);
+    dbg("Starting port scanning in range(s) %s, %zu connections%s\n",
+            rangestr, count, count > 1 ? "s" : "");
+
+
+    g_conns = (struct connection* ) malloc (sizeof(struct connection) * count);
 
     for (ip = *c; ip; ip = *++c)
     {

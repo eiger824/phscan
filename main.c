@@ -122,10 +122,7 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
 
 static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s)
 {
-    size_t n;
     char elapsed[128];
-    char rangestr[1024];
-
     if (argc - opt_index == 0 || ports_set == -1)
     {
         err("Not enough input arguments: ");
@@ -138,20 +135,13 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         return PHSCAN_ERROR;
     }
 
-    if (build_tasks_list(argc, argv, opt_index, &n) != PHSCAN_SUCCESS)
+    if (build_tasks_list(argc, argv, opt_index) != PHSCAN_SUCCESS)
     {
         die(usage, PHSCAN_PROGNAME, "Error building\n");
     }
 
-
-    get_range_str(rangestr);
-    dbg("Starting port scanning in range(s) %s, %zu connections%s\n",
-            rangestr, n, n > 1 ? "s" : "");
-
     start_timer(&g_elapsed);
-
     process_hosts(s);
-
     stop_timer(&g_elapsed, elapsed);
 
     info("Done! Scanning took %s.\n", elapsed);

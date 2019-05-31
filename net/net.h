@@ -78,7 +78,7 @@ int is_subnet(char* str);
 int compute_ip_range(char* str, char* ip_start, size_t* count);
 
 /* The new way of handling connections */
-int build_tasks_list(int argc, char** argv, int opt_index, size_t* count);
+int build_tasks_list(int argc, char** argv, int opt_index);
 void free_task_list(struct connection* conn);
 void process_hosts(scan_type_t scan_type);
 void print_scan_results();
