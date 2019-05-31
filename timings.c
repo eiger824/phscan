@@ -2,9 +2,9 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "time.h"
+#include "timings.h"
 
-void set_timer(struct timeval *t0)
+void start_timer(struct timeval *t0)
 {
     gettimeofday(t0, NULL);
 }

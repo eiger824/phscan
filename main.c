@@ -15,7 +15,7 @@
 #include <regex.h>
 
 #include "net/net.h"
-#include "time.h"
+#include "timings.h"
 #include "common.h"
 #include "colors.h"
 
@@ -148,7 +148,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
     dbg("Starting port scanning in range(s) %s, %zu connections%s\n",
             rangestr, n, n > 1 ? "s" : "");
 
-    set_timer(&g_elapsed);
+    start_timer(&g_elapsed);
 
     process_hosts(s);
 

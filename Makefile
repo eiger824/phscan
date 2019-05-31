@@ -7,13 +7,13 @@ NETPFX      := net
 
 SRCS        := main.c colors.h \
                common.c common.h \
-               time.c time.h \
+			   timings.c timings.h \
 			   progress.c progress.h \
                $(NETPFX)/net.c $(NETPFX)/net.h \
 			   $(NETPFX)/scan/tcpconnect.c $(NETPFX)/scan/tcpconnect.h \
 			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h
 
-OBJS        := main.o time.o common.o progress.o
+OBJS        := main.o timings.o common.o progress.o
 include net/Makefile
 
 OBJS := $(addprefix $(OUTPFX)/, $(OBJS))

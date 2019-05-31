@@ -3,7 +3,7 @@
 
 #include <sys/time.h>
 
-void set_timer(struct timeval* t0);
+void start_timer(struct timeval* t0);
 void stop_timer(struct timeval* t0, char* units);
 
 
