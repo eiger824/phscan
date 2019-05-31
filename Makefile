@@ -9,16 +9,16 @@ SRCS        := main.c colors.h \
                common.c common.h \
 			   timings.c timings.h \
 			   progress.c progress.h \
+			   process.c process.h \
                $(NETPFX)/net.c $(NETPFX)/net.h \
 			   $(NETPFX)/scan/tcpconnect.c $(NETPFX)/scan/tcpconnect.h \
 			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h
 
-OBJS        := main.o timings.o common.o progress.o
+OBJS        := main.o timings.o common.o progress.o process.o
 include net/Makefile
 
 OBJS := $(addprefix $(OUTPFX)/, $(OBJS))
 PROGRAM := $(addprefix $(OUTPFX)/, $(PROGRAM))
-
 
 all: $(OUTPFX) $(PROGRAM)
 

@@ -1,6 +1,12 @@
 #ifndef PHSCAN_THREADS_H_
 #define PHSCAN_THREADS_H_
 
+#define PHSCAN_CS_PROTECT(STATEMENT, MUTEX_OBJ) \
+    pthread_mutex_lock(MUTEX_OBJ);\
+    STATEMENT;\
+    pthread_mutex_unlock(MUTEX_OBJ);
+
+
 #include <stdio.h>
 
 #include "net/net.h"

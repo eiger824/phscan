@@ -31,6 +31,7 @@ static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
 static struct connection* g_conns;
 static size_t g_conn_count = 0;
+static size_t g_task_progress = 0;
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
@@ -321,7 +322,7 @@ void* thread_run (void* arg)
 {
     struct thread_data* d = (struct thread_data*)arg;
     struct connection* c;
-    size_t i, task = 0;
+    size_t i;
     int v = get_verbose();
 
     for (i = d->idx_start; i < d->idx_stop; ++i)
@@ -336,9 +337,7 @@ void* thread_run (void* arg)
         // For the progress bar
         if (v)
         {
-            pthread_mutex_lock(&m);
-            notify_progress(++task, g_conn_count);
-            pthread_mutex_unlock(&m);
+            PHSCAN_CS_PROTECT(notify_progress(++g_task_progress, g_conn_count), &m);
         }
     }
 

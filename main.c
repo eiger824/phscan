@@ -18,6 +18,7 @@
 #include "timings.h"
 #include "common.h"
 #include "colors.h"
+#include "process.h"
 
 static struct timeval g_elapsed;
 
@@ -175,6 +176,11 @@ int main(int argc , char **argv)
     port_end = -1;
     ports_set = -1;
 
+    if (signal(SIGINT, signal_handler) != 0)
+    {
+        perror("signal() failed");
+        exit(1);
+    }
 
     // Allocate memory for host start and end
     while ((c = getopt(argc, argv, "chj:p:s:St:vV")) != -1)
