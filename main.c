@@ -123,7 +123,6 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
 static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s)
 {
     size_t n;
-    host_t* hosts;
     char elapsed[128];
     char rangestr[1024];
 
@@ -139,29 +138,28 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         return PHSCAN_ERROR;
     }
 
-    if ( (hosts = build_hosts_list(argc, argv, opt_index, &n ) ) == NULL)
+    if (build_tasks_list(argc, argv, opt_index, &n) != PHSCAN_SUCCESS)
     {
-        err("There was an error building the host list to scan\n");
-        net_cleanup(hosts, n);
-        return 1;
+        die(usage, PHSCAN_PROGNAME, "Error building\n");
     }
 
+
     get_range_str(rangestr);
-    dbg("Starting port scanning in range(s) %s, %zu host%s\n",
+    dbg("Starting port scanning in range(s) %s, %zu connections%s\n",
             rangestr, n, n > 1 ? "s" : "");
 
     set_timer(&g_elapsed);
 
-    process_hosts(hosts, n, s);
+    process_hosts(s);
 
     stop_timer(&g_elapsed, elapsed);
 
     info("Done! Scanning took %s.\n", elapsed);
 
     // Print the hosts
-    print_scan_results(hosts, n);
+    print_scan_results();
 
-    net_cleanup(hosts, n);
+    net_cleanup();
 
     return PHSCAN_SUCCESS;
 }

@@ -25,6 +25,8 @@
 static int g_socket_timeout = 100; //ms
 static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
+static struct connection* g_conns;
+static size_t g_conn_count = 0;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
@@ -160,6 +162,118 @@ static void fill_port_info(struct port_info* info)
 
 }
 
+static char** build_ip_list(size_t n, int argc, char** argv, int optidx)
+{
+    int i;
+    char** ips;
+    char resolved[16];
+    char ip_start[16];
+    char ip_current[16];
+    size_t j, k, current = 0;
+    uint32_t ip_start_bits;
+
+    ips = (char**) malloc(sizeof (ips) * (n + 1));
+    for (j = 0; j < n; ++j)
+    {
+        *(ips + j) = (char*) malloc (sizeof(char) * 16);
+    }
+
+    for (i = optidx; i < argc; ++i)
+    {
+        if (is_ip(argv[i]) == 0) //IP
+        {
+            strcpy(*(ips + current++), argv[i]);
+        }
+        else if (is_subnet(argv[i]) == 0) //subnet in CIDR
+        {
+            if (compute_ip_range(argv[i], ip_start, &k) != 0)
+            {
+                return NULL;
+            }
+            ip_start_bits = ipaddr_2_bits(ip_start);
+            for (j = 0; j < k; ++j)
+            {
+                // Translate this numeric repr into a readable IP address
+                bits_2_ipaddr(ip_start_bits + j, ip_current);
+                strcpy(*(ips + current++), ip_current);
+            }
+        }
+        else //hostname
+        {
+            if (do_dns_lookup(argv[i], resolved) != 0)
+            {
+                free(ips);
+                ips = NULL;
+                break;
+            }
+            strcpy(*(ips + current++), resolved); 
+        }
+    }
+
+    ips[current] = NULL;
+    return ips;
+}
+
+static port_t* build_port_list(size_t n)
+{
+    port_t* out;
+    size_t i, j, current = 0;
+    struct port_range* r;
+
+    out = (port_t*) malloc(sizeof(port_t) * n);
+
+    for (i = 0; i < g_range_idx; ++i)
+    {
+        r = &g_port_ranges[i];
+        for (j = r->port_start; j<= r->port_stop; ++j)
+            out[current++] = j;
+    }
+
+    return out;
+}
+
+int build_tasks_list(int argc, char** argv, int opt_index, size_t* count)
+{
+    struct connection *current;
+    size_t port_count, ip_count, i, k=0;
+    char **ip_list, **c, *ip;
+    port_t* port_list;
+
+    ip_count = get_total_host_count(argc, argv, opt_index);
+    port_count = get_total_port_count();
+
+    ip_list = build_ip_list(ip_count, argc, argv, opt_index);
+    c = ip_list;
+    port_list = build_port_list(port_count);
+
+    // Total number of tasks: #hosts * #ports
+    *count = ip_count * port_count;
+    g_conn_count = *count;
+
+    g_conns = (struct connection* ) malloc (sizeof(struct connection) * *count);
+
+    for (ip = *c; ip; ip = *++c)
+    {
+        for (i = 0; i < port_count; ++i)
+        {
+            current = &g_conns[k++];
+            strcpy(current->ip, ip);
+            current->pinfo.portno = port_list[i];
+            current->pinfo.status = PHSCAN_PORT_CLOSED;
+        }
+    }
+    // Free the unneeded ip and port lists
+    free(port_list);
+    c = ip_list;
+    for (ip = *c; ip; ip = *++c)
+    {
+        free(ip);
+    }
+    free(ip_list);
+
+    return 0;
+}
+
 host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count)
 {
     host_t* out;
@@ -293,42 +407,37 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
     return 0;
 }
 
-void process_hosts(host_t* list, size_t n, scan_type_t scan_type)
+void process_hosts(scan_type_t scan_type)
 {
     port_t port;
-    host_t* h;
-    size_t i,j, current, task, total_tasks;
+    struct connection* h;
+    size_t i,j, task;
     struct port_range* r;
-    int( *handler)(const char*, port_t);
+    int( *conn_handler)(const char*, port_t);
 
     switch (scan_type)
     {
         case PHSCAN_TCP_CONNECT:
             set_socket_timeout(g_socket_timeout);
-            handler = connect_to_host;
+            conn_handler = connect_to_host;
             break;
         case PHSCAN_TCP_HALF_OPEN:
-            handler = half_open;
+            conn_handler = half_open;
             break;
         default:
             break;
     }
 
-    if (!list)
-        return;
-
     task = 0; 
-    total_tasks = n * get_total_port_count();
 
     // For the animation
     set_bar_length();
     set_bar_header("Progress: ");
 
-    for (i = 0; i < n; ++i)
+    for (i = 0; i < g_conn_count; ++i)
     {
         // Get the current host
-        h = &list[i];
-        current = 0;
+        h = &g_conns[i];
         // Go through all ranges
         for (j = 0; j < g_range_idx; ++j)
         {
@@ -336,46 +445,40 @@ void process_hosts(host_t* list, size_t n, scan_type_t scan_type)
             r = &g_port_ranges[j];
             for (port = r->port_start; port <= r->port_stop; ++port)
             {
-                if (handler(h->ip, port) != PHSCAN_PORT_OPEN)
-                    h->pinfo[current].status = PHSCAN_PORT_CLOSED;
+                if (conn_handler(h->ip, port) != PHSCAN_PORT_OPEN)
+                    h->pinfo.status = PHSCAN_PORT_CLOSED;
                 else
-                    h->pinfo[current].status = PHSCAN_PORT_OPEN;
+                    h->pinfo.status = PHSCAN_PORT_OPEN;
 
-                notify_progress(++task, total_tasks);
-
-                current++;
+                // For the progress bar
+                notify_progress(++task, g_conn_count);
             }
         }
     }
 
 }
 
-void print_scan_results(host_t* hosts, size_t n)
+void print_scan_results()
 {
     size_t i;
-    port_t portidx, port;
+    port_t port;
     int status;
-    host_t* h;
-    if (!hosts)
-        return;
+    struct connection* h;
 
-    for (i = 0; i < n; ++i)
+    for (i = 0; i < g_conn_count; ++i)
     {
-        h = &hosts[i];
+        h = &g_conns[i];
         info("%s%s%s (%s%s%s):\n",
-                COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
+                COLOR_IF(CYAN), h->ip, COLOR_IF(RESET),
                 COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
 
-        for (portidx = 0; portidx < h->nports; ++portidx)
-        {
-            port = h->pinfo[portidx].portno;
-            status = h->pinfo[portidx].status;
-            if (status != PHSCAN_PORT_OPEN)
-                dbg("  %5d: closed\n", port);
-            else
-                info("  %s%5d: open%s\n",
-                        COLOR_IF(GREEN), port, COLOR_IF(RESET));
-        }
+        port = h->pinfo.portno;
+        status = h->pinfo.status;
+        if (status != PHSCAN_PORT_OPEN)
+            dbg("  %5d: closed\n", port);
+        else
+            info("  %s%5d: open%s\n",
+                    COLOR_IF(GREEN), port, COLOR_IF(RESET));
     }
 }
 
@@ -464,6 +567,14 @@ void add_port_range(port_t start, port_t stop)
     r->port_stop = stop;
 }
 
+void free_task_list(struct connection* conns)
+{
+    if (!conns)
+        return;
+
+    free(conns);
+}
+
 void free_host_list(host_t* host_list, size_t n)
 {
     size_t i;
@@ -512,8 +623,10 @@ void get_range_str(char* str)
     }
 }
 
-void net_cleanup(host_t* host_list, size_t n)
+void net_cleanup()
 {
-    free_host_list(host_list, n);
+    if (!g_conns)
+        return;
+    free_task_list(g_conns);
     free_port_ranges();
 }

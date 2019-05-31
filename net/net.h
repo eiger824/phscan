@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/param.h>
 
 #define         MAX_INT_VAL     0xffffffff
 #define         MIN_INT_VAL     0x00000000
@@ -28,6 +29,13 @@ struct port_info
     int status;
 };
 
+/* The new struct, simple, task-oriented */
+struct connection
+{
+    char ip[16];
+    struct port_info pinfo;
+};
+
 struct port_range
 {
     port_t port_start;
@@ -36,7 +44,7 @@ struct port_range
 
 typedef struct host
 {
-    char hostname[1024];
+    char hostname[MAXHOSTNAMELEN];
     char ip[16];
     int dns_err;
     size_t nports;
@@ -69,10 +77,11 @@ int is_ip(char* str);
 int is_subnet(char* str);
 int compute_ip_range(char* str, char* ip_start, size_t* count);
 
-host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count);
-void free_host_list(host_t* host_list, size_t n);
-void process_hosts(host_t* list, size_t n, scan_type_t scan_type);
-void print_scan_results(host_t* hosts, size_t n);
+/* The new way of handling connections */
+int build_tasks_list(int argc, char** argv, int opt_index, size_t* count);
+void free_task_list(struct connection* conn);
+void process_hosts(scan_type_t scan_type);
+void print_scan_results();
 
 int get_local_ip(const char* iface, char* ip);
 
@@ -84,6 +93,6 @@ void print_port_ranges();
 void get_range_str(char* str);
 void free_port_ranges();
 
-void net_cleanup(host_t* host_list, size_t n);
+void net_cleanup();
 
 #endif   /* __NET_H */
