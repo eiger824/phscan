@@ -15,6 +15,24 @@
 #include "common.h"
 
 struct in_addr g_dest_ip;
+static int g_spoofing = 0;
+
+static void get_random_ip(char* ip, size_t n)
+{
+    int a, b, c, d;
+    srand(time(NULL));
+    if (!ip)
+        return;
+
+    memset(ip, 0, n);
+
+    a = get_random_integer(1, 253);
+    b = get_random_integer(1, 253);
+    c = get_random_integer(1, 253);
+    d = get_random_integer(1, 253);
+
+    sprintf(ip, "%d.%d.%d.%d", a, b, c, d);
+}
 
 int half_open(const char* ip, port_t port)
 {
@@ -32,7 +50,7 @@ int half_open(const char* ip, port_t port)
     struct sockaddr_in  dest;
     struct sockaddr saddr;
 
-    char source_ip[20];
+    char source_ip[16];
 
     unsigned char *buffer = (unsigned char *)malloc(65536); //Its Big!
 
@@ -45,8 +63,12 @@ int half_open(const char* ip, port_t port)
 
     g_dest_ip.s_addr = inet_addr( ip );
 
-    // Get our local IP
-    get_local_ip( NULL, source_ip );
+    if (g_spoofing)
+        // Get a random IP
+        get_random_ip(source_ip, sizeof(source_ip));
+    else
+        // Get our local IP
+        get_local_ip( NULL, source_ip );
 
     memset (datagram, 0, sizeof(datagram));	/* zero out the buffer */
 
@@ -180,22 +202,27 @@ unsigned short csum(uint16_t *ptr,int nbytes)
     uint16_t oddbyte;
     register short answer;
 
-    sum=0;
-    while(nbytes>1)
+    sum = 0;
+    while (nbytes > 1)
     {
-        sum+=*ptr++;
-        nbytes-=2;
+        sum += *ptr++;
+        nbytes -= 2;
     }
-    if(nbytes==1)
+    if (nbytes == 1)
     {
-        oddbyte=0;
-        *((uint8_t*)&oddbyte)=*(uint8_t*)ptr;
-        sum+=oddbyte;
+        oddbyte = 0;
+        *( (uint8_t*) &oddbyte ) =* (uint8_t*) ptr;
+        sum += oddbyte;
     }
 
-    sum = (sum>>16)+(sum & 0xffff);
-    sum = sum + (sum>>16);
-    answer=(short)~sum;
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum = sum + (sum >> 16);
+    answer = (short)~sum;
 
     return answer;
+}
+
+void set_ip_spoofing(int spoof)
+{
+    g_spoofing = spoof;
 }

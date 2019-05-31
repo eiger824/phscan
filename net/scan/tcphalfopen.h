@@ -24,6 +24,7 @@ struct pseudo_header    //needed for checksum calculation
 
 int process_packet(unsigned char* , int);
 unsigned short csum(unsigned short * , int );
+void set_ip_spoofing(int spoof);
 
 int half_open(const char* ip, port_t port);
 

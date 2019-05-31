@@ -89,6 +89,8 @@ int get_local_ip(const char* iface, char* ip);
 int get_connect_timeout();
 void set_connect_timeout(int timeout);
 
+void set_spoofing(int spoof);
+
 void add_port_range(port_t start, port_t stop);
 void print_port_ranges();
 void get_range_str(char* str);

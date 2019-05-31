@@ -23,6 +23,7 @@
 #include "progress.h"
 
 static int g_socket_timeout = 100; //ms
+static int g_spoof_ip = 0;
 static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
 static struct connection* g_conns;
@@ -325,6 +326,7 @@ void process_hosts(scan_type_t scan_type)
             conn_handler = connect_to_host;
             break;
         case PHSCAN_TCP_HALF_OPEN:
+            set_ip_spoofing(1);
             conn_handler = half_open;
             break;
         default:
@@ -456,6 +458,11 @@ int get_connect_timeout()
     return g_socket_timeout;
 }
 
+void set_spoofing(int spoof)
+{
+    g_spoof_ip = spoof;
+}
+
 void add_port_range(port_t start, port_t stop)
 {
     struct port_range* r;
@@ -527,3 +534,4 @@ void net_cleanup()
     free_task_list(g_conns);
     free_port_ranges();
 }
+

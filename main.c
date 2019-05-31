@@ -3,7 +3,7 @@
    */
 #include <stdio.h>
 #include <sys/sysinfo.h>
-#include <sys/time.h>
+#include <time.h>
 #include <errno.h>
 #include <netdb.h>
 #include <string.h>
@@ -39,6 +39,8 @@ static void usage(char *program)
             "                       The default, if not specified: C. Note that when using\n"
             "                       'H', the process must be run with elevated privileges\n"
             "                       or with the CAP_NET_RAW capability set\n"
+            "-S                     When using the half open scan, spoof our IP address\n"
+            "                       with a random IP\n"
             "-t <timeout>           Set socket connection timeout in ms\n"
             "                       Defaults to: %d ms\n"
             "-v                     Show version information and exit\n"
@@ -103,6 +105,8 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
         return PHSCAN_SUCCESS;
     }
 
+    srand(time(NULL));
+
     if (regex_match(str, "^[0-9]+[[:blank:]]*([,-:][[:blank:]]*[0-9]+)?$") == 0)
     {
         delim = find_delim(str);
@@ -120,7 +124,7 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
     return PHSCAN_ERROR;
 }
 
-static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s)
+static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s, int spoof)
 {
     char elapsed[128];
     if (argc - opt_index == 0 || ports_set == -1)
@@ -134,6 +138,15 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         usage(PHSCAN_PROGNAME);
         return PHSCAN_ERROR;
     }
+
+    if (spoof && s != PHSCAN_TCP_HALF_OPEN)
+    {
+        err("IP address spoofing can only be used with the TCP half open scan technique\n");
+        usage(PHSCAN_PROGNAME);
+        return PHSCAN_ERROR;
+    }
+
+    set_spoofing(spoof);
 
     if (build_tasks_list(argc, argv, opt_index) != PHSCAN_SUCCESS)
     {
@@ -154,11 +167,9 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
     return PHSCAN_SUCCESS;
 }
 
-
 int main(int argc , char **argv)
 {
-    int c;
-    int port_start, port_end, ports_set;
+    int c, port_start, port_end, ports_set, ip_spoof = 0;
     scan_type_t s = PHSCAN_TCP_CONNECT;
 
     port_start = -1;
@@ -167,7 +178,7 @@ int main(int argc , char **argv)
 
 
     // Allocate memory for host start and end
-    while ((c = getopt(argc, argv, "chj:p:s:t:vV")) != -1)
+    while ((c = getopt(argc, argv, "chj:p:s:St:vV")) != -1)
     {
         switch (c)
         {
@@ -197,6 +208,9 @@ int main(int argc , char **argv)
                 if (parse_scan_type(optarg, &s) == PHSCAN_ERROR)
                     die(usage, PHSCAN_PROGNAME, "Wrong scan type `%s'\n", optarg);
                 break;
+            case 'S':
+                ip_spoof = 1;
+                break;
             case 't':
                 set_connect_timeout(atoi(optarg));
                 break;
@@ -214,5 +228,5 @@ int main(int argc , char **argv)
     }
 
     // Positional argument: hosts
-    return scan_hosts(argc, argv, optind, ports_set, s);
+    return scan_hosts(argc, argv, optind, ports_set, s, ip_spoof);
 } 
