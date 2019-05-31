@@ -362,7 +362,7 @@ void process_hosts(scan_type_t scan_type)
             conn_handler = connect_to_host;
             break;
         case PHSCAN_TCP_HALF_OPEN:
-            set_ip_spoofing(1);
+            set_ip_spoofing(g_spoof_ip);
             conn_handler = half_open;
             break;
         default:
