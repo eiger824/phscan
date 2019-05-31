@@ -1,119 +1,77 @@
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif  /* _DEFAULT_SOURCE */
 
 #include <errno.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <limits.h>
 #include <pthread.h>
-#include <netinet/tcp.h>
-#include <netinet/ip.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
 #include "tcphalfopen.h" 
+#include "net.h"
+#include "common.h"
 
-#define u_char uint8_t
+struct in_addr g_dest_ip;
 
 int half_open(const char* ip, port_t port)
 {
-    //TODO: implement
-    return 0;
-}
-
-
-
-struct pseudo_header    //needed for checksum calculation
-{
-    unsigned int source_address;
-    unsigned int dest_address;
-    unsigned char placeholder;
-    unsigned char protocol;
-    unsigned short tcp_length;
-
-    struct tcphdr tcp;
-};
-
-struct in_addr dest_ip;
-
-int main_loop(int argc, char *argv[])
-{
-    //Create a raw socket
-    int s = socket (AF_INET, SOCK_RAW , IPPROTO_TCP);
-    if(s < 0)
-    {
-        printf ("Error creating socket. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-        exit(0);
-    }
-    else
-    {
-        printf("Socket created.\n");
-    }
-
+    int s;
+    socklen_t sl;
+    ssize_t data_size;
     //Datagram to represent the packet
     char datagram[4096];	
-
     //IP header
     struct iphdr *iph = (struct iphdr *) datagram;
-
     //TCP header
     struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
-
-    struct sockaddr_in  dest;
     struct pseudo_header psh;
 
+    struct sockaddr_in  dest;
+    struct sockaddr saddr;
 
-    if (argc != 2)
-    {
-        printf("Usage: %s <dst-IP> <dst-port>\n", argv[0]);
-        exit(1);
-    }
-
-    char *target = argv[1];
-
-    if( inet_addr( target ) != -1)
-    {
-        dest_ip.s_addr = inet_addr( target );
-    }
-    else
-    {
-        char *ip = hostname_to_ip(target);
-        if(ip != NULL)
-        { printf("%s resolved to %s \n" , target , ip);
-            //Convert domain name to IP
-            dest_ip.s_addr = inet_addr( hostname_to_ip(target) );
-        }
-        else
-        {
-            printf("Unable to resolve hostname : %s" , target);
-            exit(1);
-        }
-    }
-
-    int source_port = 43591;
     char source_ip[20];
+
+    unsigned char *buffer = (unsigned char *)malloc(65536); //Its Big!
+
+    //Create a raw socket
+    if ( (s = socket (AF_INET, SOCK_RAW , IPPROTO_TCP)) < 0)
+    {
+        perror("socket() failed");
+        return PHSCAN_PORT_CLOSED;
+    } 
+
+    g_dest_ip.s_addr = inet_addr( ip );
+
+    // Get our local IP
     get_local_ip( NULL, source_ip );
 
-    printf("Local source IP is %s \n" , source_ip);
+    memset (datagram, 0, sizeof(datagram));	/* zero out the buffer */
 
-    memset (datagram, 0, 4096);	/* zero out the buffer */
-
-    //Fill in the IP Header
+    /*
+     * IP Header
+     */
     iph->ihl = 5;
     iph->version = 4;
     iph->tos = 0;
     iph->tot_len = sizeof (struct ip) + sizeof (struct tcphdr);
-    iph->id = htons (54321);	//Id of this packet
+    iph->id = htons ( get_random_integer(100, USHRT_MAX) );	//Id of this packet
     iph->frag_off = htons(16384);
     iph->ttl = 64;
     iph->protocol = IPPROTO_TCP;
     iph->check = 0;		//Set to 0 before calculating checksum
     iph->saddr = inet_addr ( source_ip );	//Spoof the source ip address
-    iph->daddr = dest_ip.s_addr;
+    iph->daddr = g_dest_ip.s_addr;
 
     iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
 
-    //TCP Header
-    tcph->source = htons ( source_port );
-    tcph->dest = htons (80);
+    /*
+     * TCP Header
+     */
+    tcph->source = htons ( get_random_integer(1040, 60000) );
+    tcph->dest = htons (port);
     tcph->seq = htonl(1105024978);
     tcph->ack_seq = 0;
     tcph->doff = sizeof(struct tcphdr) / 4;		//Size of tcp header
@@ -133,121 +91,65 @@ int main_loop(int argc, char *argv[])
 
     if (setsockopt (s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) < 0)
     {
-        printf ("Error setting IP_HDRINCL. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-        exit(0);
-    }
-
-    printf("Starting sniffer thread...\n");
-    char *message1 = "Thread 1";
-    int  iret1;
-    pthread_t sniffer_thread;
-
-    if( pthread_create( &sniffer_thread , NULL ,  receive_ack , (void*) message1) < 0)
-    {
-        printf ("Could not create sniffer thread. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-        exit(0);
-    }
-
-    printf("Starting to send syn packets\n");
-
-    int port;
-    dest.sin_family = AF_INET;
-    dest.sin_addr.s_addr = dest_ip.s_addr;
-    for(port = 5550 ; port < 5560; port++)
-    {
-        tcph->dest = htons ( port );
-        tcph->check = 0;	// if you set a checksum to zero, your kernel's IP stack should fill in the correct checksum during transmission
-
-        psh.source_address = inet_addr( source_ip );
-        psh.dest_address = dest.sin_addr.s_addr;
-        psh.placeholder = 0;
-        psh.protocol = IPPROTO_TCP;
-        psh.tcp_length = htons( sizeof(struct tcphdr) );
-
-        memcpy(&psh.tcp , tcph , sizeof (struct tcphdr));
-
-        tcph->check = csum( (unsigned short*) &psh , sizeof (struct pseudo_header));
-
-        //Send the packet
-        if ( sendto (s, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
-        {
-            printf ("Error sending syn packet. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-            exit(0);
-        }
-    }
-
-    pthread_join( sniffer_thread , NULL);
-    printf("%d" , iret1);
-
-    return 0;
-}
-
-int start_sniffer()
-{
-    int sock_raw;
-
-    int saddr_size , data_size;
-    struct sockaddr saddr;
-
-    unsigned char *buffer = (unsigned char *)malloc(65536); //Its Big!
-
-    printf("Sniffer initialising...\n");
-    fflush(stdout);
-
-    //Create a raw socket that shall sniff
-    sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
-
-    if(sock_raw < 0)
-    {
-        printf("Socket Error\n");
-        fflush(stdout);
+        perror("setsockopt() failed");
         return 1;
     }
 
-    saddr_size = sizeof saddr;
-    socklen_t s;
+    dest.sin_family = AF_INET;
+    dest.sin_addr.s_addr = g_dest_ip.s_addr;
 
-    while(1)
+    tcph->dest = htons ( port );
+    tcph->check = 0;	// if you set a checksum to zero, your kernel's IP stack should fill in the correct checksum during transmission
+
+    psh.source_address = inet_addr( source_ip );
+    psh.dest_address = dest.sin_addr.s_addr;
+    psh.placeholder = 0;
+    psh.protocol = IPPROTO_TCP;
+    psh.tcp_length = htons( sizeof(struct tcphdr) );
+
+    memcpy(&psh.tcp , tcph , sizeof (struct tcphdr));
+
+    tcph->check = csum( (unsigned short*) &psh , sizeof (struct pseudo_header));
+
+    //Send the packet
+    if ( sendto (s, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
     {
-        //Receive a packet
-        data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &s);
+        perror("sendto() failed");
+        return 1;
+    }
 
-        if(data_size <0 )
+    int ret;
+    // Receive from buffer, await until done
+    while (1)
+    {
+        if ( (data_size = recvfrom(s , buffer , 65536 , 0 , &saddr , &sl)) < 0 )
         {
             perror("recvfrom() error");
             fflush(stdout);
             return 1;
         }
 
+        ret = process_packet(buffer , data_size);
         //Now process the packet
-        process_packet(buffer , data_size);
+        if ( ret == PHSCAN_PORT_OPEN || ret == PHSCAN_PORT_CLOSED)
+            break;
     }
-
-    close(sock_raw);
-    printf("Sniffer finished.");
-    fflush(stdout);
-    return 0;
+    return ret;
 }
 
 /*
    Method to sniff incoming packets and look for Ack replies
    */
-void * receive_ack( void *ptr )
-{
-    //Start the sniffer thing
-    start_sniffer();
-    return NULL;
-}
-
-
-void process_packet(unsigned char* buffer, int size)
+int process_packet(unsigned char* buffer, int size)
 {
     //Get the IP Header part of this packet
     struct iphdr *iph = (struct iphdr*)buffer;
     struct sockaddr_in source,dest;
     unsigned short iphdrlen;
+    if (size < 0 || !buffer)
+        return PHSCAN_PKT_UNRELATED;
 
-    if(iph->protocol == 6)
+    if (iph->protocol == 6)
     {
         struct iphdr *iph = (struct iphdr *)buffer;
         iphdrlen = iph->ihl*4;
@@ -261,35 +163,33 @@ void process_packet(unsigned char* buffer, int size)
         dest.sin_addr.s_addr = iph->daddr;
 
         if (tcph->syn == 1 && tcph->ack == 1
-                && source.sin_addr.s_addr == dest_ip.s_addr )
-        {
-            printf("Port %d open \n" , ntohs(tcph->source));
-        }
-        else if (tcph->rst == 1 && source.sin_addr.s_addr == dest_ip.s_addr)
-        {
-            printf("Port %d closed\n" , ntohs(tcph->source));
-        }
-            fflush(stdout);
+                && source.sin_addr.s_addr == g_dest_ip.s_addr )
+            return PHSCAN_PORT_OPEN;
+        else
+            return PHSCAN_PORT_CLOSED;
     }
+    return PHSCAN_PKT_UNRELATED;
 }
 
 /*
-   Checksums - IP and TCP
-   */
-unsigned short csum(unsigned short *ptr,int nbytes) 
+ * Checksums - IP and TCP
+ */
+unsigned short csum(uint16_t *ptr,int nbytes) 
 {
     register long sum;
-    unsigned short oddbyte;
+    uint16_t oddbyte;
     register short answer;
 
     sum=0;
-    while(nbytes>1) {
+    while(nbytes>1)
+    {
         sum+=*ptr++;
         nbytes-=2;
     }
-    if(nbytes==1) {
+    if(nbytes==1)
+    {
         oddbyte=0;
-        *((u_char*)&oddbyte)=*(u_char*)ptr;
+        *((uint8_t*)&oddbyte)=*(uint8_t*)ptr;
         sum+=oddbyte;
     }
 
@@ -297,33 +197,5 @@ unsigned short csum(unsigned short *ptr,int nbytes)
     sum = sum + (sum>>16);
     answer=(short)~sum;
 
-    return(answer);
+    return answer;
 }
-
-/*
-   Get ip from domain name
-   */
-char* hostname_to_ip(char * hostname)
-{
-    struct hostent *he;
-    struct in_addr **addr_list;
-    int i;
-
-    if ( (he = gethostbyname( hostname ) ) == NULL) 
-    {
-        // get the host info
-        herror("gethostbyname");
-        return NULL;
-    }
-
-    addr_list = (struct in_addr **) he->h_addr_list;
-
-    for(i = 0; addr_list[i] != NULL; i++) 
-    {
-        //Return the first one;
-        return inet_ntoa(*addr_list[i]) ;
-    }
-
-    return NULL;
-}
-

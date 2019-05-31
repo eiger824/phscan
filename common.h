@@ -25,5 +25,6 @@ void set_verbose(int verbose);
 int get_verbose();
 void set_color(int color);
 int get_color();
+int get_random_integer(int min, int max);
 
 #endif /* COMMON_H_ */

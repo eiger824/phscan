@@ -10,7 +10,9 @@
 
 #include "tcpconnect.h"
 
-int connect_to_host(char* host, uint16_t port, int msecs)
+static int g_msecs;
+
+int connect_to_host(const char* ip, port_t port)
 {
     struct sockaddr_in servaddr;
     int sockfd;
@@ -24,7 +26,7 @@ int connect_to_host(char* host, uint16_t port, int msecs)
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(host);
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
 
     // Attempt connection to socket
@@ -46,8 +48,8 @@ int connect_to_host(char* host, uint16_t port, int msecs)
 
         // Set out desired timeout
         struct timeval tv;
-        tv.tv_sec = msecs / 1e3;
-        tv.tv_usec = msecs * 1e3;
+        tv.tv_sec = g_msecs / 1e3;
+        tv.tv_usec = g_msecs * 1e3;
 
         res = select(sockfd +1, &rfd, &wfd, NULL, &tv);
         if (res == -1)
@@ -73,3 +75,12 @@ int connect_to_host(char* host, uint16_t port, int msecs)
     return PHSCAN_PORT_OPEN;
 }
 
+void set_socket_timeout(int ms)
+{
+    g_msecs = ms;
+}
+
+int get_socket_timeout()
+{
+    return g_msecs;
+}

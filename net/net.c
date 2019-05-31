@@ -16,6 +16,7 @@
 
 #include "net.h"
 #include "scan/tcpconnect.h"
+#include "scan/tcphalfopen.h"
 
 #include "common.h"
 #include "colors.h"
@@ -292,12 +293,26 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
     return 0;
 }
 
-void process_hosts(host_t* list, size_t n)
+void process_hosts(host_t* list, size_t n, scan_type_t scan_type)
 {
     port_t port;
     host_t* h;
     size_t i,j, current, task, total_tasks;
     struct port_range* r;
+    int( *handler)(const char*, port_t);
+
+    switch (scan_type)
+    {
+        case PHSCAN_TCP_CONNECT:
+            set_socket_timeout(g_socket_timeout);
+            handler = connect_to_host;
+            break;
+        case PHSCAN_TCP_HALF_OPEN:
+            handler = half_open;
+            break;
+        default:
+            break;
+    }
 
     if (!list)
         return;
@@ -321,7 +336,7 @@ void process_hosts(host_t* list, size_t n)
             r = &g_port_ranges[j];
             for (port = r->port_start; port <= r->port_stop; ++port)
             {
-                if (connect_to_host(h->ip, port, g_socket_timeout) != PHSCAN_PORT_OPEN)
+                if (handler(h->ip, port) != PHSCAN_PORT_OPEN)
                     h->pinfo[current].status = PHSCAN_PORT_CLOSED;
                 else
                     h->pinfo[current].status = PHSCAN_PORT_OPEN;
@@ -419,12 +434,12 @@ int get_local_ip(const char* iface, char* ip)
     return !found;
 }
 
-void set_socket_timeout(int timeout)
+void set_connect_timeout(int timeout)
 {
     g_socket_timeout = timeout;
 }
 
-int get_socket_timeout()
+int get_connect_timeout()
 {
     return g_socket_timeout;
 }

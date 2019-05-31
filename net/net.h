@@ -10,13 +10,16 @@
 #define         MIN_INT_VAL     0x00000000
 
 #define         port_t      uint16_t
+
 #define         PHSCAN_PORT_CLOSED      0
 #define         PHSCAN_PORT_OPEN        1
+#define         PHSCAN_PKT_UNRELATED    2
 
 typedef enum scan_type
 {
-    TCP_CONNECT = 0,
-    TCP_HALF_OPEN,
+    PHSCAN_TCP_CONNECT = 0,
+    PHSCAN_TCP_HALF_OPEN,
+    PHSCAN_SCAN_TYPE_UNKNOWN
 } scan_type_t;
 
 struct port_info
@@ -68,13 +71,13 @@ int compute_ip_range(char* str, char* ip_start, size_t* count);
 
 host_t* build_hosts_list(int argc, char** argv, int opt_index, size_t* count);
 void free_host_list(host_t* host_list, size_t n);
-void process_hosts(host_t* list, size_t n);
+void process_hosts(host_t* list, size_t n, scan_type_t scan_type);
 void print_scan_results(host_t* hosts, size_t n);
 
 int get_local_ip(const char* iface, char* ip);
 
-int get_socket_timeout();
-void set_socket_timeout(int timeout);
+int get_connect_timeout();
+void set_connect_timeout(int timeout);
 
 void add_port_range(port_t start, port_t stop);
 void print_port_ranges();

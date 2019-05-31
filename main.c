@@ -32,6 +32,13 @@ static void usage(char *program)
             "-j <threads>           Run the scan in parallel\n"
             "                       Note that for this machine, %d is the allowed maximum\n"
             "-p <port[{:,-}range]>  Perform an IP address scanning on the specified port\n"
+            "-s <scan_type>         Perform the indicated technique when doing the port scanning\n"
+            "                       Supported types:\n"
+            "                         C => Full TCP connect() (3-way handshake)\n"
+            "                         H => TCP Half open (SYN - SYN/ACK)\n"
+            "                       The default, if not specified: C. Note that when using\n"
+            "                       'H', the process must be run with elevated privileges\n"
+            "                       or with the CAP_NET_RAW capability set\n"
             "-t <timeout>           Set socket connection timeout in ms\n"
             "                       Defaults to: %d ms\n"
             "-v                     Show version information and exit\n"
@@ -43,13 +50,39 @@ static void usage(char *program)
             "Example usage 2: %s -p 80     192.168.1.0/24\tDo a host scan in search for open port 80\n"
             "Example usage 3: %s -p 10,20  192.168.1.0/24\tPerform both port and host scans\n"
             , program, get_color() ? "enabled":"disabled",
-            get_nprocs(), get_socket_timeout(), program, program, program );
+            get_nprocs(), get_connect_timeout(), program, program, program );
 
 }
 static void version(char *program)
 {
     err("%s - version v%.2f, developed by eiger824\n",
             program, PHSCAN_VERSION);
+}
+
+static int parse_scan_type(const char* str, scan_type_t* type)
+{
+    if (!str)
+        return PHSCAN_ERROR;
+
+    if (regex_match(str, "^[CH]$") == 0)
+    {
+        switch (*str)
+        {
+            case 'C':
+                *type = PHSCAN_TCP_CONNECT; 
+                break;
+            case 'H':
+                *type = PHSCAN_TCP_HALF_OPEN;
+                break;
+            default:  /* Never reached */
+                *type = PHSCAN_SCAN_TYPE_UNKNOWN;
+                break;
+        }
+
+        return PHSCAN_SUCCESS;
+    }
+
+    return PHSCAN_ERROR;
 }
 
 static int parse_ports(const char* str, int* port_start, int* port_end)
@@ -87,7 +120,7 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
     return PHSCAN_ERROR;
 }
 
-static int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
+static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s)
 {
     size_t n;
     host_t* hosts;
@@ -119,7 +152,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set)
 
     set_timer(&g_elapsed);
 
-    process_hosts(hosts, n);
+    process_hosts(hosts, n, s);
 
     stop_timer(&g_elapsed, elapsed);
 
@@ -138,6 +171,7 @@ int main(int argc , char **argv)
 {
     int c;
     int port_start, port_end, ports_set;
+    scan_type_t s = PHSCAN_TCP_CONNECT;
 
     port_start = -1;
     port_end = -1;
@@ -145,7 +179,7 @@ int main(int argc , char **argv)
 
 
     // Allocate memory for host start and end
-    while ((c = getopt(argc, argv, "chj:p:t:vV")) != -1)
+    while ((c = getopt(argc, argv, "chj:p:s:t:vV")) != -1)
     {
         switch (c)
         {
@@ -171,8 +205,12 @@ int main(int argc , char **argv)
                 add_port_range(port_start, port_end);
                 ports_set = 1;
                 break;
+            case 's':
+                if (parse_scan_type(optarg, &s) == PHSCAN_ERROR)
+                    die(usage, PHSCAN_PROGNAME, "Wrong scan type `%s'\n", optarg);
+                break;
             case 't':
-                set_socket_timeout(atoi(optarg));
+                set_connect_timeout(atoi(optarg));
                 break;
             case 'v':
                 version(PHSCAN_PROGNAME);
@@ -188,5 +226,5 @@ int main(int argc , char **argv)
     }
 
     // Positional argument: hosts
-    return scan_hosts(argc, argv, optind, ports_set);
+    return scan_hosts(argc, argv, optind, ports_set, s);
 } 

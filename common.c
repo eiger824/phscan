@@ -120,3 +120,7 @@ int get_color()
     return g_color;
 }
 
+int get_random_integer(int min, int max)
+{
+    return rand() % ( max - min + 1) + min;
+}
