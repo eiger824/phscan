@@ -32,6 +32,7 @@ struct port_info
 /* The new struct, simple, task-oriented */
 struct connection
 {
+    char hostname[MAXHOSTNAMELEN];
     char ip[16];
     struct port_info pinfo;
 };
