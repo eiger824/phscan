@@ -20,7 +20,6 @@
 #include "colors.h"
 
 static struct timeval g_elapsed;
-static int g_threads = 1;
 
 static void usage(char *program)
 {
@@ -169,7 +168,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
 
 int main(int argc , char **argv)
 {
-    int c, port_start, port_end, ports_set, ip_spoof = 0;
+    int c, port_start, port_end, ports_set, ip_spoof = 0, thread_count;
     scan_type_t s = PHSCAN_TCP_CONNECT;
 
     port_start = -1;
@@ -189,14 +188,14 @@ int main(int argc , char **argv)
                 usage(PHSCAN_PROGNAME);
                 exit(0);
             case 'j':
-                err("[threads] => FEATURE NOT YET SUPPORTED. Running with 1 thread\n");
-                g_threads = atoi(optarg);
-                if (g_threads < 0 || g_threads > get_nprocs())
+                thread_count = atoi(optarg);
+                if (thread_count < 0 || thread_count > get_nprocs())
                 {
                     err("Invalid thread count. Accepted range: [1-%d]\n",
                             get_nprocs());
                     exit(PHSCAN_ERROR);
                 }
+                set_thread_count(thread_count);
                 break;
             case 'p':
                 if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)

@@ -90,6 +90,7 @@ int get_connect_timeout();
 void set_connect_timeout(int timeout);
 
 void set_spoofing(int spoof);
+void set_thread_count(size_t n);
 
 void add_port_range(port_t start, port_t stop);
 void print_port_ranges();

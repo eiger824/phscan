@@ -6,6 +6,7 @@
 #include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <regex.h>
@@ -21,13 +22,16 @@
 #include "common.h"
 #include "colors.h"
 #include "progress.h"
+#include "threads.h"
 
 static int g_socket_timeout = 100; //ms
 static int g_spoof_ip = 0;
+static size_t g_thread_count = 1; // default
 static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
 static struct connection* g_conns;
 static size_t g_conn_count = 0;
+static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
@@ -214,7 +218,7 @@ int build_tasks_list(int argc, char** argv, int opt_index)
     g_conn_count = count;
 
     get_range_str(rangestr);
-    dbg("Starting port scanning in range(s) %s, %zu connections%s\n",
+    dbg("Starting port scanning in range(s) %s, %zu connection%s\n",
             rangestr, count, count > 1 ? "s" : "");
 
     ret = 0;
@@ -313,11 +317,43 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
     return 0;
 }
 
+void* thread_run (void* arg)
+{
+    struct thread_data* d = (struct thread_data*)arg;
+    struct connection* c;
+    size_t i, task = 0;
+    int v = get_verbose();
+
+    for (i = d->idx_start; i < d->idx_stop; ++i)
+    {
+        // Get the current host
+        c = &g_conns[i];
+        if (d->conn_hdlr(c->ip, c->pinfo.portno) != PHSCAN_PORT_OPEN)
+            c->pinfo.status = PHSCAN_PORT_CLOSED;
+        else
+            c->pinfo.status = PHSCAN_PORT_OPEN;
+
+        // For the progress bar
+        if (v)
+        {
+            pthread_mutex_lock(&m);
+            notify_progress(++task, g_conn_count);
+            pthread_mutex_unlock(&m);
+        }
+    }
+
+    return NULL;
+}
+
 void process_hosts(scan_type_t scan_type)
 {
-    struct connection* h;
-    size_t i, task;
+    size_t i, tasks_per_thread;
     int( *conn_handler)(const char*, port_t);
+    pthread_t threads[g_thread_count];
+    pthread_attr_t attrs;
+
+    // Init thread attributes
+    pthread_attr_init(&attrs);
 
     switch (scan_type)
     {
@@ -333,24 +369,38 @@ void process_hosts(scan_type_t scan_type)
             break;
     }
 
-    task = 0; 
-
     // For the animation
     set_bar_length();
     set_bar_header("Progress: ");
 
-    for (i = 0; i < g_conn_count; ++i)
+    tasks_per_thread = g_conn_count / g_thread_count;
+    // Let's make this worth: each thread must have at least
+    // 10 tasks
+    if (tasks_per_thread < 10)
     {
-        // Get the current host
-        h = &g_conns[i];
-        if (conn_handler(h->ip, h->pinfo.portno) != PHSCAN_PORT_OPEN)
-            h->pinfo.status = PHSCAN_PORT_CLOSED;
-        else
-            h->pinfo.status = PHSCAN_PORT_OPEN;
-
-        // For the progress bar
-        notify_progress(++task, g_conn_count);
+        dbg("Nr. tasks is too low, running with 1 thread\n");
+        g_thread_count = 1;
     }
+
+    for (i = 0; i < g_thread_count; ++i)
+    {
+        struct thread_data d;
+        d.id = i;
+        d.idx_start = i * tasks_per_thread;
+        d.idx_stop = i < g_thread_count - 1 ?
+            (i + 1) * tasks_per_thread - 1 :
+            g_conn_count - 1;
+        d.conn_hdlr = conn_handler;
+
+        if (pthread_create(&threads[i], &attrs,
+                    thread_run, (void*) &d) != PHSCAN_SUCCESS)
+        {
+            perror("pthread_create() failed");
+        }
+    }
+
+    for (i = 0; i < g_thread_count; ++i)
+        pthread_join(threads[i], NULL);
 
 }
 
@@ -461,6 +511,11 @@ int get_connect_timeout()
 void set_spoofing(int spoof)
 {
     g_spoof_ip = spoof;
+}
+
+void set_thread_count(size_t n)
+{
+    g_thread_count = n;
 }
 
 void add_port_range(port_t start, port_t stop)
