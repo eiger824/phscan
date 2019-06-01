@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 
+size_t get_win_size();
 void set_bar_length();
 void set_bar_header(const char* text);
 void set_bar(size_t progress, const char* delim);

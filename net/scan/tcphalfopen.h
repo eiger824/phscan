@@ -22,7 +22,7 @@ struct pseudo_header    //needed for checksum calculation
     struct tcphdr tcp;
 };
 
-int process_packet(unsigned char* , int);
+int process_packet(uint8_t* , int);
 unsigned short csum(unsigned short * , int );
 void set_ip_spoofing(int spoof);
 

@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "common.h"
 
@@ -123,4 +125,11 @@ int get_color()
 int get_random_integer(int min, int max)
 {
     return rand() % ( max - min + 1) + min;
+}
+
+size_t get_win_size()
+{
+    struct winsize ws;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+    return ws.ws_col;
 }

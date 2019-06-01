@@ -1,6 +1,4 @@
-#include <sys/ioctl.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "progress.h"
 #include "common.h"
@@ -11,10 +9,7 @@ const char* g_header;
 
 void set_bar_length()
 {
-    struct winsize ws;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
-    // Adjust width so we have space for other information
-    g_width = ws.ws_col;
+    g_width = get_win_size(); 
 }
 
 void set_bar_header(const char* text)
