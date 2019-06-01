@@ -194,8 +194,8 @@ int half_open(const char* ip, port_t port)
     // Receive from thread, await until done
     void* retval;
     pthread_join(rsp, &retval);
-
-    return ((struct thread_retval*)retval)->port_status;
+    
+    return retval ? ((struct thread_retval*)retval)->port_status : PHSCAN_PORT_CLOSED;
 }
 
 
