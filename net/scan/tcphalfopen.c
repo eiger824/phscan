@@ -314,7 +314,6 @@ static void* wait_for_syn_ack(void* data)
     while (ret != 0)
     {
         //Receive a packet
-        printf("Blocking...\n");
         data_size = recvfrom(sock_raw , buffer , USHRT_MAX, 0 , &saddr , &sl);
 
         if ( data_size < 0 )
