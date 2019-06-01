@@ -19,12 +19,6 @@ struct thread_data
     int (*conn_hdlr)(const char*, port_t);
 };
 
-struct thread_retval 
-{
-    int id;
-    int port_status;
-};
-
 void* thread_run(void* data);
 
 #endif /* PHSCAN_THREADS_H_ */

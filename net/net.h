@@ -97,6 +97,8 @@ void print_port_ranges();
 void get_range_str(char* str);
 void free_port_ranges();
 
+int set_task_status(struct connection* conns, size_t n, const char* ip, port_t port, int status);
+
 void net_cleanup();
 
 #endif   /* __NET_H */

@@ -33,6 +33,7 @@ static struct connection* g_conns;
 static size_t g_conn_count = 0;
 static size_t g_task_progress = 0;
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+static size_t g_current = 0;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
@@ -362,7 +363,9 @@ void process_hosts(scan_type_t scan_type)
             break;
         case PHSCAN_TCP_HALF_OPEN:
             set_ip_spoofing(g_spoof_ip);
-            conn_handler = half_open;
+//             conn_handler = half_open;
+            run_tasks(g_conns, g_conn_count);
+            return;
             break;
         default:
             break;
@@ -589,3 +592,21 @@ void net_cleanup()
     free_port_ranges();
 }
 
+int set_task_status(struct connection* conns, size_t n, const char* ip, port_t port, int status)
+{
+    struct connection* h;
+    if (!conns || !ip)
+        return 1;
+
+    for (size_t i = 0; i < n; ++i)
+    {
+        h = &conns[i];
+        if (!strcmp(h->ip, ip) && h->pinfo.portno == port)
+        {
+            h->pinfo.status = status;
+            g_current++;
+            break;
+        }
+    }
+    return g_current == g_conn_count ? 0 : 1;
+}
