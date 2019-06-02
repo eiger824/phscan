@@ -201,7 +201,7 @@ void set_ip_spoofing(int spoof)
  * Will take in the whole array of 'n' tasks and execute them
  * (i.e., perform the connections)
  * */
-int run_tasks(struct connection* conns, size_t n)
+int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
 {
     int ret, s;
     //Datagram to represent the packet
@@ -226,7 +226,7 @@ int run_tasks(struct connection* conns, size_t n)
     pthread_t rsp;
     pthread_attr_t attrs;
 
-    if (!conns || n == 0)
+    if (!conns || nr_tasks == 0)
         return PHSCAN_ERROR;
 
     //Create a raw socket
@@ -239,7 +239,7 @@ int run_tasks(struct connection* conns, size_t n)
     // Fill in thread data structure
     rv.id = 0;
     rv.conns = conns;
-    rv.nconns = n;
+    rv.nconns = nr_tasks;
 
     pthread_attr_init(&attrs);
 
@@ -250,7 +250,7 @@ int run_tasks(struct connection* conns, size_t n)
         return PHSCAN_ERROR;
     }
 
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < nr_tasks; ++i)
     {
         h = &conns[i];
 

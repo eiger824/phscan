@@ -127,6 +127,8 @@ static int parse_ports(const char* str, int* port_start, int* port_end)
 static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s, int spoof)
 {
     char elapsed[128];
+    int ret;
+
     if (argc - opt_index == 0 || ports_set == -1)
     {
         err("Not enough input arguments: ");
@@ -154,14 +156,21 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
     }
 
     start_timer(&g_elapsed);
-    process_hosts(s);
-    stop_timer(&g_elapsed, elapsed);
+    ret = process_hosts(s);
 
-    info("Done! Scanning took %s.\n", elapsed);
+    if ( ret != PHSCAN_SUCCESS)
+    {
+        err("Error scanning hosts\n");
+    }
+    else
+    {
+        stop_timer(&g_elapsed, elapsed);
+        info("Done! Scanning took %s.\n", elapsed);
+        // Print the hosts
+        print_scan_results();
+    }
 
-    // Print the hosts
-    print_scan_results();
-
+    // Free up memory
     net_cleanup();
 
     return PHSCAN_SUCCESS;

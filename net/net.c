@@ -1,4 +1,6 @@
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif  /* _DEFAULT_SOURCE */
 
 #include <stdint.h>
 #include <string.h>
@@ -31,8 +33,6 @@ static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
 static struct connection* g_conns;
 static size_t g_conn_count = 0;
-static size_t g_task_progress = 0;
-static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 static size_t g_current = 0;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
@@ -319,94 +319,28 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
     return 0;
 }
 
-void* thread_run (void* arg)
+int process_hosts(scan_type_t scan_type)
 {
-    struct thread_data* d = (struct thread_data*)arg;
-    struct connection* c;
-    size_t i;
-    int v = get_verbose();
-
-    PHSCAN_CS_PROTECT(dbg("Thread[%d]. Processing tasks [%zu - %zu]\n", d->id, d->idx_start, d->idx_stop), &m);
-
-    for (i = d->idx_start; i <= d->idx_stop; ++i)
-    {
-        // Get the current host
-        c = &g_conns[i];
-        if (d->conn_hdlr(c->ip, c->pinfo.portno) != PHSCAN_PORT_OPEN)
-            c->pinfo.status = PHSCAN_PORT_CLOSED;
-        else
-            c->pinfo.status = PHSCAN_PORT_OPEN;
-
-        // For the progress bar
-        if (v)
-        {
-            PHSCAN_CS_PROTECT(notify_progress(++g_task_progress, g_conn_count), &m);
-        }
-    }
-
-    return NULL;
-}
-
-void process_hosts(scan_type_t scan_type)
-{
-    size_t i, tasks_per_thread;
-    int( *conn_handler)(const char*, port_t);
-    pthread_t threads[g_thread_count];
-    struct thread_data tdata[g_thread_count];
-    pthread_attr_t attrs;
-
-    // Init thread attributes
-    pthread_attr_init(&attrs);
+    int ret;
 
     switch (scan_type)
     {
         case PHSCAN_TCP_CONNECT:
             set_socket_timeout(g_socket_timeout);
-            conn_handler = connect_to_host;
+            ret = tcpconnect_run_tasks(g_conns, g_conn_count, g_thread_count);
             break;
         case PHSCAN_TCP_HALF_OPEN:
             set_ip_spoofing(g_spoof_ip);
-//             conn_handler = half_open;
-            run_tasks(g_conns, g_conn_count);
-            return;
+#pragma message ("Thread support for TCP HALF OPEN coming soon!") 
+            ret = run_tasks(g_conns, g_conn_count, 1);
             break;
         default:
+            err("Unknown scan type, aborting\n");
+            ret = PHSCAN_ERROR;
             break;
     }
 
-    // For the animation
-    set_bar_length();
-    set_bar_header("Progress: ");
-
-    tasks_per_thread = g_conn_count / g_thread_count;
-    // Let's make this worth: each thread must have at least
-    // 10 tasks
-    if (tasks_per_thread < 10)
-    {
-        dbg("Nr. tasks is too low, running with 1 thread\n");
-        g_thread_count = 1;
-    }
-
-    for (i = 0; i < g_thread_count; ++i)
-    {
-        struct thread_data* d = &tdata[i];
-        d->id = i;
-        d->idx_start = i * tasks_per_thread;
-        d->idx_stop = i < g_thread_count - 1 ?
-            (i + 1) * tasks_per_thread - 1 :
-            g_conn_count - 1;
-        d->conn_hdlr = conn_handler;
-
-        if (pthread_create(&threads[i], &attrs,
-                    thread_run, (void*) d) != PHSCAN_SUCCESS)
-        {
-            perror("pthread_create() failed");
-        }
-    }
-
-    for (i = 0; i < g_thread_count; ++i)
-        pthread_join(threads[i], NULL);
-
+    return ret;
 }
 
 void print_scan_results()
