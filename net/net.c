@@ -326,6 +326,8 @@ void* thread_run (void* arg)
     size_t i;
     int v = get_verbose();
 
+    PHSCAN_CS_PROTECT(dbg("Thread[%d]. Processing tasks [%zu - %zu]\n", d->id, d->idx_start, d->idx_stop), &m);
+
     for (i = d->idx_start; i <= d->idx_stop; ++i)
     {
         // Get the current host
@@ -350,6 +352,7 @@ void process_hosts(scan_type_t scan_type)
     size_t i, tasks_per_thread;
     int( *conn_handler)(const char*, port_t);
     pthread_t threads[g_thread_count];
+    struct thread_data tdata[g_thread_count];
     pthread_attr_t attrs;
 
     // Init thread attributes
@@ -386,16 +389,16 @@ void process_hosts(scan_type_t scan_type)
 
     for (i = 0; i < g_thread_count; ++i)
     {
-        struct thread_data d;
-        d.id = i;
-        d.idx_start = i * tasks_per_thread;
-        d.idx_stop = i < g_thread_count - 1 ?
+        struct thread_data* d = &tdata[i];
+        d->id = i;
+        d->idx_start = i * tasks_per_thread;
+        d->idx_stop = i < g_thread_count - 1 ?
             (i + 1) * tasks_per_thread - 1 :
             g_conn_count - 1;
-        d.conn_hdlr = conn_handler;
+        d->conn_hdlr = conn_handler;
 
         if (pthread_create(&threads[i], &attrs,
-                    thread_run, (void*) &d) != PHSCAN_SUCCESS)
+                    thread_run, (void*) d) != PHSCAN_SUCCESS)
         {
             perror("pthread_create() failed");
         }

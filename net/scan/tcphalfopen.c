@@ -56,11 +56,28 @@ void dump_packet(uint8_t* buffer, size_t size, size_t width)
     printf("\n");
 }
 
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+void dump_ip_packet(struct ip* iph)
+#else
 void dump_ip_packet(struct iphdr* iph)
+#endif
 {
     if (!iph)
         return;
 
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+    printf("iph->ihl = %u\n", iph->ip_hl);
+    printf("iph->version = %u\n", iph->ip_v);
+    printf("iph->tos = %u\n", iph->ip_tos);
+    printf("iph->tot_len = %u\n", iph->ip_len); 
+    printf("iph->id = 0x%x\n", iph->ip_id); 
+    printf("iph->frag_off = 0x%x\n", iph->ip_off); 
+    printf("iph->ttl = %u\n", iph->ip_ttl);
+    printf("iph->protocol = %d\n", iph->ip_p);
+    printf("iph->check = 0x%x\n", iph->ip_sum); 
+    printf("iph->saddr = %u\n", iph->ip_src.s_addr); 
+    printf("iph->daddr = %u\n", iph->ip_dst.s_addr); 
+#else
     printf("iph->ihl = %u\n", iph->ihl);
     printf("iph->version = %u\n", iph->version);
     printf("iph->tos = %u\n", iph->tos);
@@ -72,6 +89,7 @@ void dump_ip_packet(struct iphdr* iph)
     printf("iph->check = 0x%x\n", iph->check); 
     printf("iph->saddr = %u\n", iph->saddr); 
     printf("iph->daddr = %u\n", iph->daddr); 
+#endif
 }
 
 /*
@@ -80,7 +98,11 @@ void dump_ip_packet(struct iphdr* iph)
 int process_packet(uint8_t* buffer, int size, char* ip, port_t* port)
 {
     //Get the IP Header part of this packet
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+    struct ip *iph = (struct ip*)buffer;
+#else
     struct iphdr *iph = (struct iphdr*)buffer;
+#endif
     struct tcphdr *tcph;
     struct sockaddr_in source,dest;
     unsigned short iphdrlen;
@@ -88,23 +110,47 @@ int process_packet(uint8_t* buffer, int size, char* ip, port_t* port)
     if (size < 0 || !buffer)
         return PHSCAN_PKT_UNRELATED;
 
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+    if (iph->ip_p== IPPROTO_TCP)
+#else
     if (iph->protocol == IPPROTO_TCP)
+#endif
     {
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        iphdrlen = iph->ip_hl*4;
+#else
         iphdrlen = iph->ihl*4;
+#endif
 
         tcph = (struct tcphdr*)(buffer + iphdrlen);
 
         memset(&source, 0, sizeof(source));
-        source.sin_addr.s_addr = iph->saddr;
         memset(&dest, 0, sizeof(dest));
+
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        source.sin_addr.s_addr = iph->ip_src.s_addr;
+        dest.sin_addr.s_addr = iph->ip_dst.s_addr;
+#else
+        source.sin_addr.s_addr = iph->saddr;
         dest.sin_addr.s_addr = iph->daddr;
+#endif
 
         // Remote host: inet_ntoa(source.sin_addr)
         strcpy(ip, inet_ntoa(source.sin_addr));
         // Remote port: ntohs(tcph->source)
-        *port = ntohs(tcph->source);
 
-        if (tcph->syn == 1 && tcph->ack == 1
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        *port = ntohs(tcph->th_sport);
+#else
+        *port = ntohs(tcph->source);
+#endif 
+
+        if (
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+                tcph->th_flags == (TH_SYN | TH_ACK)
+#else
+                tcph->syn == 1 && tcph->ack == 1
+#endif
                 && source.sin_addr.s_addr == g_dest_ip.s_addr )
         {
             return PHSCAN_PORT_OPEN;
@@ -161,7 +207,11 @@ int run_tasks(struct connection* conns, size_t n)
     //Datagram to represent the packet
     char datagram[4096];	
     //IP header
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+    struct ip *iph = (struct ip*) datagram;
+#else
     struct iphdr *iph = (struct iphdr *) datagram;
+#endif
     //TCP header
     struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
 
@@ -217,6 +267,21 @@ int run_tasks(struct connection* conns, size_t n)
         memset (datagram, 0, 4096);	/* zero out the buffer */
 
         //Fill in the IP Header
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        iph->ip_hl = 5;
+        iph->ip_v= 4;
+        iph->ip_tos = 0;
+        iph->ip_len = sizeof (struct ip) + sizeof (struct tcphdr);
+        iph->ip_id = htons (54321);	//Id of this packet
+        iph->ip_off = htons(16384);
+        iph->ip_ttl = 64;
+        iph->ip_p = IPPROTO_TCP;
+        iph->ip_sum = 0;		//Set to 0 before calculating checksum
+        iph->ip_src.s_addr = inet_addr ( source_ip );	//Spoof the source ip address
+        iph->ip_dst.s_addr = g_dest_ip.s_addr;
+
+        iph->ip_sum = chksum ((unsigned short *) datagram, iph->ip_len >> 1);
+#else
         iph->ihl = 5;
         iph->version = 4;
         iph->tos = 0;
@@ -230,8 +295,22 @@ int run_tasks(struct connection* conns, size_t n)
         iph->daddr = g_dest_ip.s_addr;
 
         iph->check = chksum ((unsigned short *) datagram, iph->tot_len >> 1);
+#endif
 
         //TCP Header
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        tcph->th_sport = htons ( get_random_integer(1040, 60000) );
+        tcph->th_dport = htons ( h->pinfo.portno );
+        tcph->th_seq = htonl(1105024978);
+        tcph->th_ack = 0;
+
+        tcph->th_off = sizeof(struct tcphdr) / 4;
+        tcph->th_flags = TH_SYN;
+
+        tcph->th_win = htons ( 14600 );	// maximum allowed window size
+        tcph->th_sum = 0; //if you set a checksum to zero, your kernel's IP stack should fill in the correct checksum during transmission
+        tcph->th_urp = 0;
+#else
         tcph->source = htons ( get_random_integer(1040, 60000) );
         tcph->dest = htons ( h->pinfo.portno );
         tcph->seq = htonl(1105024978);
@@ -246,6 +325,7 @@ int run_tasks(struct connection* conns, size_t n)
         tcph->window = htons ( 14600 );	// maximum allowed window size
         tcph->check = 0; //if you set a checksum to zero, your kernel's IP stack should fill in the correct checksum during transmission
         tcph->urg_ptr = 0;
+#endif
 
         //IP_HDRINCL to tell the kernel that headers are included in the packet
         int one = 1;
@@ -260,8 +340,13 @@ int run_tasks(struct connection* conns, size_t n)
         dest.sin_family = AF_INET;
         dest.sin_addr.s_addr = g_dest_ip.s_addr;
 
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        tcph->th_dport = htons ( h->pinfo.portno );
+        tcph->th_sum = 0;
+#else
         tcph->dest = htons ( h->pinfo.portno );
         tcph->check = 0;	// if you set a checksum to zero, your kernel's IP stack should fill in the correct checksum during transmission
+#endif
 
         psh.source_address = inet_addr( source_ip );
         psh.dest_address = dest.sin_addr.s_addr;
@@ -271,10 +356,18 @@ int run_tasks(struct connection* conns, size_t n)
 
         memcpy(&psh.tcp , tcph , sizeof (struct tcphdr));
 
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        tcph->th_sum = chksum( (unsigned short*) &psh , sizeof (struct pseudo_header));
+#else
         tcph->check = chksum( (unsigned short*) &psh , sizeof (struct pseudo_header));
+#endif
 
         //Send the packet
+#if defined (__CYGWIN__ ) || defined(_WIN32)
+        if ( sendto (s, datagram , sizeof(struct ip) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
+#else
         if ( sendto (s, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
+#endif
         {
             perror("sendto() failed");
             return PHSCAN_ERROR;
