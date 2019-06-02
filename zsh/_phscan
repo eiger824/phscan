@@ -1,0 +1,18 @@
+#compdef _phscan phscan
+
+function _phscan {
+    local line
+
+    _arguments -C \
+        "-c[Show colorized output]" \
+        "-h[Show help information]" \
+        "-j[Run with these amount of threads]" \
+        "-p[Port or port range, separated by ':', '-' or ',']" \
+        "-s[Type of scan, supported types: C, H]" \
+        "-S[Spoof source IP address]" \
+        "-t[Timeout for socket connection, in ms]" \
+            "-v[Show version information]" \
+            "-V[Enable verbose]" \
+            "*::arg:->args"
+}
+
