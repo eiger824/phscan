@@ -195,10 +195,10 @@ int main(int argc , char **argv)
                 exit(0);
             case 'j':
                 thread_count = atoi(optarg);
-                if (thread_count < 0 || thread_count > get_nprocs())
+                if (thread_count < 1 || thread_count > get_nprocs())
                 {
-                    err("Invalid thread count. Accepted range: [1-%d]\n",
-                            get_nprocs());
+                    err("Invalid thread count (%d). Accepted range: [1-%d]\n",
+                            thread_count, get_nprocs());
                     exit(PHSCAN_ERROR);
                 }
                 set_thread_count(thread_count);
