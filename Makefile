@@ -1,9 +1,9 @@
-PROGRAM     = phscan
-CFLAGS      = -c -I. -Inet -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
-LDFLAGS     = -fPIC -lm -pthread
-CC          := gcc
-OUTPFX      := build
-NETPFX      := net
+PROGRAM      = phscan
+CFLAGS       = -c -I. -Inet -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
+LDFLAGS      = -fPIC -lm -pthread
+CC           := gcc
+OUTPFX       := build
+NETPFX       := net
 
 SRCS        := main.c colors.h \
                common.c common.h \
@@ -15,7 +15,9 @@ SRCS        := main.c colors.h \
 			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h
 
 OBJS        := main.o timings.o common.o progress.o process.o
+
 include net/Makefile
+include test/Makefile
 
 OBJS := $(addprefix $(OUTPFX)/, $(OBJS))
 PROGRAM := $(addprefix $(OUTPFX)/, $(PROGRAM))
@@ -36,5 +38,12 @@ $(OUTPFX)/main.o: $(SRCS)
 $(OUTPFX)/%.o: %.c %.h
 	${CC} ${CFLAGS} $< -o $@
 
+test: $(TEST_FULLPROGRAM) 
+
+$(TEST_FULLPROGRAM): $(TEST_SRCS) 
+	${CC} ${TEST_CFLAGS} $< -o $@ 
+	rm -f $(TEST_PROGRAM) 
+	ln -s $@ $(TEST_PROGRAM) 
+
 clean:
-	rm -rf $(OUTPFX) $(shell basename $(PROGRAM)) *~
+	rm -rf $(OUTPFX) $(shell basename $(PROGRAM)) $(TEST_PROGRAM) $(TEST_FULLPROGRAM) *~
