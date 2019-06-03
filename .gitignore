@@ -2,3 +2,4 @@ build
 phscan
 test-server
 *~
+test/*.exe
