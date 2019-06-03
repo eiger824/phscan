@@ -9,7 +9,7 @@
 #define         PHSCAN_SUCCESS       0
 #define         PHSCAN_ERROR         1
 
-#define         PHSCAN_VERSION       1.0
+#define         PHSCAN_VERSION       1.1
 
 #define     port_t  uint16_t
 
