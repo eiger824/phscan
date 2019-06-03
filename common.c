@@ -82,6 +82,41 @@ int regex_match(const char* str, const char* regex)
     return res;
 }
 
+int parse_ports(const char* str, port_t* port_start, port_t* port_end)
+{
+    char delim;
+    char* p;
+    // Input will be in 'str'
+    // Output should be a port start and end
+    // In case a single port is provided => port_start = port_end
+
+    if (regex_match(str, "^[0-9]+$") == 0)
+    {
+        // Simplest case, no ranges, single port
+        *port_start = atoi(str);
+        *port_end = *port_start; 
+        if (verify_port(*port_start) || verify_port(*port_end))
+            return PHSCAN_ERROR;
+        return PHSCAN_SUCCESS;
+    }
+
+    if (regex_match(str, "^[0-9]+[[:blank:]]*([,-:][[:blank:]]*[0-9]+)?$") == 0)
+    {
+        delim = find_delim(str);
+	if (delim != ',' && delim != '-' && delim != ':')
+	    return PHSCAN_ERROR;
+
+        *port_start = atoi(str);
+        p = strchr(str, delim);
+        *port_end = atoi(++p);
+        if (verify_port(*port_start) || verify_port(*port_end))
+            return PHSCAN_ERROR;
+        return PHSCAN_SUCCESS;
+    }
+
+    return PHSCAN_ERROR;
+}
+
 char find_delim(const char* str)
 {
     unsigned int i;

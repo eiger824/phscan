@@ -1,4 +1,5 @@
 PROGRAM      = phscan
+PHSCAN_ROOT  = $(shell echo ${PWD})
 CFLAGS       = -c -I. -Inet -Wall -Wextra -Wpedantic -fPIC -std=c11 -g
 LDFLAGS      = -fPIC -lm -pthread
 CC           := gcc
@@ -38,12 +39,16 @@ $(OUTPFX)/main.o: $(SRCS)
 $(OUTPFX)/%.o: %.c %.h
 	${CC} ${CFLAGS} $< -o $@
 
+
+####################### Test related ######################
 test: $(TEST_FULLPROGRAM) 
 
 $(TEST_FULLPROGRAM): $(TEST_SRCS) 
-	${CC} ${TEST_CFLAGS} $< -o $@ 
+	${CC} ${TEST_CFLAGS} $^ -o $@ 
 	rm -f $(TEST_PROGRAM) 
 	ln -s $@ $(TEST_PROGRAM) 
+
+###########################################################
 
 clean:
 	rm -rf $(OUTPFX) $(shell basename $(PROGRAM)) $(TEST_PROGRAM) $(TEST_FULLPROGRAM) *~

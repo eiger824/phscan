@@ -13,6 +13,8 @@
 
 #define     port_t  uint16_t
 
+#include "net/net.h"
+
 void err(const char* msg, ...);
 void info(const char* msg, ...);
 void die(void (*usage_fun)(char*), char* program, const char* msg, ...);
@@ -20,6 +22,7 @@ void dbg(const char* msg, ...);
 char *get_basename(char* str);
 int regex_match(const char* str, const char* regex);
 char find_delim(const char* str);
+int parse_ports(const char* str, port_t* port_start, port_t* port_end);
 int verify_port(int port);
 void set_verbose(int verbose);
 int get_verbose();

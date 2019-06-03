@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <netinet/in.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <string.h>
+#include <limits.h>
 #include <signal.h>
 #include <libgen.h>
 #include <getopt.h>
@@ -14,16 +15,51 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
-#define MAX 80
+#include "common.h"
+#include "threads.h"
+
 #define SA struct sockaddr
 
-int g_debug = 0;
-int g_sockfd;
+static int* g_sockfds = NULL;
+static port_t* g_port_list = NULL;
+static size_t g_port_count;
+static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
-void usage(char* program)
+struct thread_info_data
+{
+    int id;
+    port_t portno;
+    size_t index;
+    int socket_type;
+};
+
+static void add_new_port(port_t port)
+{
+    if (g_port_list == NULL)
+    {
+        g_port_list = (port_t* ) malloc (sizeof(port_t) * USHRT_MAX);
+    }
+    g_port_list[g_port_count++] = port;
+}
+
+void server_cleanup()
+{
+    if (g_port_list)
+    {
+        free(g_port_list);
+        g_port_list = NULL;
+    }
+    if (g_sockfds)
+    {
+        free(g_sockfds);
+        g_sockfds = NULL;
+    }
+}
+
+static void usage(char* program)
 {
     printf(
-            "USAGE: %s [ARGS] <port>\n"
+            "USAGE: %s [ARGS] PORT1[[:,-]PORT2]\n"
             "ARGS:\n"
             " -d         Print some debug info\n"
             " -h         Print this help and exit\n"
@@ -32,36 +68,114 @@ void usage(char* program)
           );
 }
 
-void sighdlr(int signo)
+static void sighdlr(int signo)
 {
     switch (signo)
     {
         case SIGINT:
             printf("\nSIGINT caught, terminating server\n");
-            close(g_sockfd);
+            server_cleanup();
             exit(SIGINT);
         default:
-            exit(1);
+            server_cleanup();
+            exit(PHSCAN_ERROR);
     }
 }
 
-void info(const char* msg, ...)
+static int compute_ports(int argc, char** argv, int optidx)
 {
-    if (!g_debug) return;
-    va_list args;
-    va_start(args, msg);
-    vprintf(msg, args);
-    va_end(args);
+    int i;
+    port_t p;
+    port_t pstart, pstop;
+
+    // parse the positional arguments
+    if (argc - optind == 0)
+    {
+        err("No ports were provided\n");
+        usage(argv[0]);
+        return PHSCAN_ERROR;
+    }
+    for (i = optidx; i < argc; ++i)
+    {
+        if (parse_ports(argv[i], &pstart, &pstop) != PHSCAN_SUCCESS)
+        {
+            err("Error parsing ports\n");
+            return PHSCAN_ERROR;
+        }
+        for (p = pstart; p <= pstop; ++p)
+            add_new_port(p);
+    }
+    return PHSCAN_SUCCESS;
+}
+
+static void* start_parallel_server(void* data)
+{
+    port_t portno;
+    int connfd, socket_type;
+    socklen_t s;
+    struct sockaddr_in servaddr, cli; 
+    struct thread_info_data* d = (struct thread_info_data*) data;
+
+    portno = d->portno;
+    socket_type = d->socket_type;
+
+    // socket create and verification
+    if ((g_sockfds[d->index] = socket(AF_INET, socket_type, 0)) == -1)
+    {
+        perror("socket");
+        exit (1);
+    }
+    PHSCAN_CS_PROTECT(dbg("Socket successfully created.\n"), &m);
+
+    memset(&servaddr, 0, sizeof(servaddr));
+
+    // Assign IP and port
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(portno);
+
+    // Binding newly created socket to given IP and verification
+    if ((bind(g_sockfds[d->index], (SA*)&servaddr, sizeof(servaddr))) != 0)
+    {
+        perror("bind");
+        exit (1);
+    }
+    PHSCAN_CS_PROTECT(dbg("Socket successfully binded.\n"), &m);
+
+    // Now server is ready to listen and verification
+    if ((listen(g_sockfds[d->index], 5)) != 0)
+    {
+        perror("listen");
+        exit (1);
+    }
+    PHSCAN_CS_PROTECT(info("[Thread %p] Server listening to 0.0.0.0/0 on port %d ...\n", (void*)pthread_self(), portno), &m);
+
+    while (1)
+    {
+        // Accept the data packet from client and verification
+        connfd = accept(g_sockfds[d->index], (SA*)&cli, &s);
+        if (connfd < 0)
+        {
+            perror("accept");
+            exit (1);
+        }
+        PHSCAN_CS_PROTECT(dbg("Client `%s' connected.\n", inet_ntoa(cli.sin_addr)), &m);
+    }
+
+    server_cleanup();
+    return NULL;
 }
 
 // Driver function
 int main(int argc, char* argv[])
 {
-    int connfd, len;
-    struct sockaddr_in servaddr, cli;
-    int c, portno;
-    int socket_type;
+    int ret;
+    int c, socket_type;
     char proto[16];
+    size_t i;
+    pthread_t threads[USHRT_MAX];
+    struct thread_info_data tdata[USHRT_MAX];
+    pthread_attr_t attrs;
 
     if (signal(SIGINT, sighdlr) != 0)
     {
@@ -77,7 +191,8 @@ int main(int argc, char* argv[])
         switch (c)
         {
             case 'd':
-                g_debug = 1;
+                info("Verbose is ON\n");
+                set_verbose(1);
                 break;
             case 'h':
                 usage(argv[0]);
@@ -99,58 +214,38 @@ int main(int argc, char* argv[])
                 exit (1);
         }
     }
-    info("Chosen L4-protocol: %s\n", proto);
-    // parse the positional arguments
-    if (argc - optind != 1)
+    dbg("Chosen L4-protocol: %s\n", proto);
+
+    if (compute_ports(argc, argv, optind) != PHSCAN_SUCCESS)
     {
-        usage(argv[0]);
-        exit (1);
+        return PHSCAN_ERROR;
     }
-    portno = atoi(argv[optind]);
 
-    // socket create and verification
-    if ((g_sockfd = socket(AF_INET, socket_type, 0)) == -1)
+    // Init the socket fd array
+    g_sockfds = (int*) malloc(sizeof(int) * g_port_count);
+    memset(g_sockfds, 0, sizeof(int) * g_port_count);
+
+    pthread_attr_init(&attrs);
+
+    // Create a thread per listening port (don't overuse..)
+    for (i = 0; i < g_port_count; ++i)
     {
-        perror("socket");
-        exit (1);
-    }
-    info("Socket successfully created.\n");
+        tdata[i].id = i;
+        tdata[i].portno = g_port_list[i];
+        tdata[i].index = i;
+        tdata[i].socket_type = socket_type;
 
-    memset(&servaddr, 0, sizeof(servaddr));
-
-    // Assign IP and port
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(portno);
-
-    // Binding newly created socket to given IP and verification
-    if ((bind(g_sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0)
-    {
-        perror("bind");
-        exit (1);
-    }
-    info("Socket successfully binded.\n");
-
-    // Now server is ready to listen and verification
-    if ((listen(g_sockfd, 5)) != 0)
-    {
-        perror("listen");
-        exit (1);
-    }
-    info("Server listening to 0.0.0.0/0 on port %d ...\n", portno);
-
-    while (1)
-    {
-        len = sizeof(cli);
-        // Accept the data packet from client and verification
-        connfd = accept(g_sockfd, (SA*)&cli, &len);
-        if (connfd < 0)
+        if ( (ret = pthread_create(&threads[i], &attrs, start_parallel_server, (void*)&tdata[i])) != PHSCAN_SUCCESS)
         {
-            perror("accept");
-            exit (1);
+            perror("pthread_create() failed");
+            server_cleanup();
+            return ret;
         }
-        info("Client `%s' connected.\n", inet_ntoa(cli.sin_addr));
     }
-    return 0;
+
+    for (i = 0; i < g_port_count; ++i)
+        pthread_join(threads[i], NULL);
+
+    return PHSCAN_SUCCESS;
 }
 

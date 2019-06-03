@@ -87,43 +87,6 @@ static int parse_scan_type(const char* str, scan_type_t* type)
     return PHSCAN_ERROR;
 }
 
-static int parse_ports(const char* str, int* port_start, int* port_end)
-{
-    char delim;
-    char* p;
-    // Input will be in 'str'
-    // Output should be a port start and end
-    // In case a single port is provided => port_start = port_end
-
-    if (regex_match(str, "^[0-9]+$") == 0)
-    {
-        // Simplest case, no ranges, single port
-        *port_start = atoi(str);
-        *port_end = *port_start; 
-        if (verify_port(*port_start) || verify_port(*port_end))
-            return PHSCAN_ERROR;
-        return PHSCAN_SUCCESS;
-    }
-
-    srand(time(NULL));
-
-    if (regex_match(str, "^[0-9]+[[:blank:]]*([,-:][[:blank:]]*[0-9]+)?$") == 0)
-    {
-        delim = find_delim(str);
-	if (delim != ',' && delim != '-' && delim != ':')
-	    return PHSCAN_ERROR;
-
-        *port_start = atoi(str);
-        p = strchr(str, delim);
-        *port_end = atoi(++p);
-        if (verify_port(*port_start) || verify_port(*port_end))
-            return PHSCAN_ERROR;
-        return PHSCAN_SUCCESS;
-    }
-
-    return PHSCAN_ERROR;
-}
-
 static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s, int spoof)
 {
     char elapsed[128];
@@ -184,7 +147,8 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
 
 int main(int argc , char **argv)
 {
-    int c, port_start, port_end, ports_set, ip_spoof = 0, thread_count;
+    int c, ports_set, ip_spoof = 0, thread_count;
+    port_t port_start, port_end;
     scan_type_t s = PHSCAN_TCP_CONNECT;
 
     port_start = -1;
