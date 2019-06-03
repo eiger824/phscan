@@ -412,7 +412,7 @@ int tcphalfopen_run_tasks(struct connection* conns, size_t nr_tasks, int nr_thre
     if (tasks_per_thread < 10)
     {
         dbg("Nr. tasks is too low, running with 1 thread\n");
-        nr_tasks = 1;
+        nr_threads = 1;
     }
 
     for (i = 0; i < nr_threads; ++i)
