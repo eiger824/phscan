@@ -474,6 +474,7 @@ static void* wait_for_syn_ack(void* data)
     char ip[16];
     port_t port;
     uint8_t* buffer = (uint8_t*) malloc(USHRT_MAX); //Its Big!
+    socklen_t sl;
 
     dbg("Sniffer thread initialising\n");
 
@@ -485,7 +486,7 @@ static void* wait_for_syn_ack(void* data)
         return NULL;
     }
 
-    socklen_t sl;
+    sl = sizeof(saddr);
     while (ret != 0)
     {
         //Receive a packet

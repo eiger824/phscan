@@ -29,7 +29,6 @@ static struct thread_info_data* g_tdata;
 
 struct thread_info_data
 {
-    int id;
     port_t portno;
     size_t index;
     int socket_type;
@@ -125,7 +124,7 @@ static void* start_parallel_server(void* data)
     port_t portno;
     int connfd, socket_type;
     socklen_t s;
-    struct sockaddr_in servaddr, cli; 
+    struct sockaddr_in servaddr, cliaddr; 
     struct thread_info_data* d = (struct thread_info_data*) data;
 
     portno = d->portno;
@@ -140,6 +139,7 @@ static void* start_parallel_server(void* data)
     PHSCAN_CS_PROTECT(dbg("Socket successfully created.\n"), &m);
 
     memset(&servaddr, 0, sizeof(servaddr));
+    memset(&cliaddr, 0, sizeof(cliaddr));
 
     // Assign IP and port
     servaddr.sin_family = AF_INET;
@@ -160,18 +160,23 @@ static void* start_parallel_server(void* data)
         perror("listen");
         exit (1);
     }
-    PHSCAN_CS_PROTECT(info("[Thread %p] Server listening to 0.0.0.0/0 on port %d ...\n", (void*)pthread_self(), portno), &m);
+    PHSCAN_CS_PROTECT(info("[Thread %p] Server listening to 0.0.0.0/0 on port %d ...\n",
+                (void*)pthread_self(), portno), &m);
 
     while (1)
     {
+        s = sizeof(cliaddr);
         // Accept the data packet from client and verification
-        connfd = accept(g_sockfds[d->index], (SA*)&cli, &s);
+        connfd = accept(g_sockfds[d->index], (SA*)&cliaddr, &s);
         if (connfd < 0)
         {
             perror("accept");
             exit (1);
         }
-        PHSCAN_CS_PROTECT(info("[Thread %p] Client `%s' connected.\n", (void*)pthread_self(), inet_ntoa(cli.sin_addr)), &m);
+        PHSCAN_CS_PROTECT(info("[Thread %p] Client `%s' connected to port %u.\n",
+                    (void*)pthread_self(), inet_ntoa(cliaddr.sin_addr), portno), &m);
+        // Close this client
+        close(connfd);
     }
 
     server_cleanup();
@@ -244,7 +249,6 @@ int main(int argc, char* argv[])
     // Create a thread per listening port (don't overuse..)
     for (i = 0; i < g_port_count; ++i)
     {
-        g_tdata[i].id = i;
         g_tdata[i].portno = g_port_list[i];
         g_tdata[i].index = i;
         g_tdata[i].socket_type = socket_type;
