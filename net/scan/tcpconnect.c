@@ -22,7 +22,7 @@ static struct connection* g_conns;
 static size_t g_conn_count = 0;
 static size_t g_task_progress = 0;
 
-void* thread_run (void* arg)
+void* tcpconn_thread_run (void* arg)
 {
     struct thread_data* d = (struct thread_data*)arg;
     struct connection* c;
@@ -49,6 +49,7 @@ void* thread_run (void* arg)
 
     return NULL;
 }
+
 int tcpconnect_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
 {
     size_t tasks_per_thread;
@@ -91,9 +92,10 @@ int tcpconnect_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threa
             nr_tasks - 1;
 
         if (pthread_create(&threads[i], &attrs,
-                    thread_run, (void*) d) != PHSCAN_SUCCESS)
+                    tcpconn_thread_run, (void*) d) != PHSCAN_SUCCESS)
         {
             perror("pthread_create() failed");
+            return PHSCAN_ERROR;
         }
     }
 

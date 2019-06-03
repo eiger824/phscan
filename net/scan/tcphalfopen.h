@@ -34,6 +34,6 @@ int process_packet(uint8_t* buffer, int size, char* ip, port_t* port);
 unsigned short chksum(uint16_t* , int );
 void set_ip_spoofing(int spoof);
 
-int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads);
+int tcphalfopen_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads);
 
 #endif /* NET_HALFOPEN_H_ */

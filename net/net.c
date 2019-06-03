@@ -33,7 +33,6 @@ static struct port_range* g_port_ranges = NULL;
 static size_t g_range_idx = 0;
 static struct connection* g_conns;
 static size_t g_conn_count = 0;
-static size_t g_current = 0;
 
 int bits_2_ipaddr(uint32_t ipaddr_bits, char *ip)
 {
@@ -321,26 +320,30 @@ int compute_ip_range(char* str, char* ip_start, size_t* count)
 
 int process_hosts(scan_type_t scan_type)
 {
-    int ret;
+    /* Each scanning technique has its own implementation
+     * , but everyone takes the same arguments: the array
+     * containing the tasks (connections) to perform, the
+     * number of such tasks and the amount of threads to
+     * use
+     * */
+    int (*task_handler)(struct connection*, size_t, int);
 
     switch (scan_type)
     {
         case PHSCAN_TCP_CONNECT:
             set_socket_timeout(g_socket_timeout);
-            ret = tcpconnect_run_tasks(g_conns, g_conn_count, g_thread_count);
+            task_handler = tcpconnect_run_tasks;
             break;
         case PHSCAN_TCP_HALF_OPEN:
             set_ip_spoofing(g_spoof_ip);
-#pragma message ("Thread support for TCP HALF OPEN coming soon!") 
-            ret = run_tasks(g_conns, g_conn_count, 1);
+            task_handler = tcphalfopen_run_tasks;
             break;
         default:
             err("Unknown scan type, aborting\n");
-            ret = PHSCAN_ERROR;
-            break;
+            return PHSCAN_ERROR;
     }
 
-    return ret;
+    return task_handler(g_conns, g_conn_count, g_thread_count);
 }
 
 void print_scan_results()
@@ -529,21 +532,3 @@ void net_cleanup()
     free_port_ranges();
 }
 
-int set_task_status(struct connection* conns, size_t n, const char* ip, port_t port, int status)
-{
-    struct connection* h;
-    if (!conns || !ip)
-        return 1;
-
-    for (size_t i = 0; i < n; ++i)
-    {
-        h = &conns[i];
-        if (!strcmp(h->ip, ip) && h->pinfo.portno == port)
-        {
-            h->pinfo.status = status;
-            g_current++;
-            break;
-        }
-    }
-    return g_current == g_conn_count ? 0 : 1;
-}

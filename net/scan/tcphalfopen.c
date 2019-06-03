@@ -14,9 +14,14 @@
 #include "net.h"
 #include "common.h"
 #include "threads.h"
+#include "progress.h"
 
 struct in_addr g_dest_ip;
 static int g_spoofing = 0;
+static struct connection* g_conns;
+static size_t g_conn_count = 0;
+static size_t g_tasks_progress = 0;
+static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER; 
 
 static void* wait_for_syn_ack(void* data);
 
@@ -197,16 +202,18 @@ void set_ip_spoofing(int spoof)
     g_spoofing = spoof;
 }
 
-/* Function: run_tasks
- * Will take in the whole array of 'n' tasks and execute them
- * (i.e., perform the connections)
- * */
-int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
+void* tcphalfopen_thread_run(void* data)
 {
-    int ret, s;
-    //Datagram to represent the packet
+    int s;
+    int ret = PHSCAN_ERROR;
+    struct thread_data* d = (struct thread_data*)data;
+    struct connection* h;
+    size_t i;
     char datagram[4096];	
-    //IP header
+    char source_ip[16];
+    struct sockaddr_in  dest;
+    struct pseudo_header psh;
+
 #if defined (__CYGWIN__ ) || defined(_WIN32)
     struct ip *iph = (struct ip*) datagram;
 #else
@@ -215,44 +222,19 @@ int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
     //TCP header
     struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
 
-    struct sockaddr_in  dest;
-    struct pseudo_header psh;
-
-    struct connection* h;
-    struct sniffer_thread_data rv;
-
-    char source_ip[16];
-
-    pthread_t rsp;
-    pthread_attr_t attrs;
-
-    if (!conns || nr_tasks == 0)
-        return PHSCAN_ERROR;
-
     //Create a raw socket
     if ( (s = socket (AF_INET, SOCK_RAW , IPPROTO_TCP)) < 0 )
     {
-        perror("socket() failed");
-        return PHSCAN_ERROR;
+        perror("sending socket() failed");
+        pthread_exit( (void*) &ret );
     }
 
-    // Fill in thread data structure
-    rv.id = 0;
-    rv.conns = conns;
-    rv.nconns = nr_tasks;
 
-    pthread_attr_init(&attrs);
+    PHSCAN_CS_PROTECT(dbg("Thread[%d]. Processing tasks [%zu - %zu]\n", d->id, d->idx_start, d->idx_stop), &m);
 
-    // Start thread that will get the answer
-    if ( (ret = pthread_create(&rsp, &attrs, wait_for_syn_ack, (void*)&rv)) != PHSCAN_SUCCESS)
+    for (i = d->idx_start; i <= d->idx_stop; ++i)
     {
-        perror ("pthread_create() failed");
-        return PHSCAN_ERROR;
-    }
-
-    for (size_t i = 0; i < nr_tasks; ++i)
-    {
-        h = &conns[i];
+        h = &g_conns[i];
 
         g_dest_ip.s_addr = inet_addr(h->ip);
 
@@ -272,7 +254,7 @@ int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
         iph->ip_v= 4;
         iph->ip_tos = 0;
         iph->ip_len = sizeof (struct ip) + sizeof (struct tcphdr);
-        iph->ip_id = htons (54321);	//Id of this packet
+        iph->ip_id = htons ( get_random_integer(1, USHRT_MAX) );	//Id of this packet
         iph->ip_off = htons(16384);
         iph->ip_ttl = 64;
         iph->ip_p = IPPROTO_TCP;
@@ -286,7 +268,7 @@ int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
         iph->version = 4;
         iph->tos = 0;
         iph->tot_len = sizeof (struct ip) + sizeof (struct tcphdr);
-        iph->id = htons (54321);	//Id of this packet
+        iph->id = htons ( get_random_integer (1, USHRT_MAX));	//Id of this packet
         iph->frag_off = htons(16384);
         iph->ttl = 64;
         iph->protocol = IPPROTO_TCP;
@@ -331,10 +313,11 @@ int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
         int one = 1;
         const int *val = &one;
 
-        if (setsockopt (s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) < 0)
+        if ( (ret = setsockopt (s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) ) < 0)
         {
             perror("setsockopt() failed");
-            return PHSCAN_ERROR;
+            close(s);
+            pthread_exit( (void*) &ret );
         }
 
         dest.sin_family = AF_INET;
@@ -364,20 +347,121 @@ int run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
 
         //Send the packet
 #if defined (__CYGWIN__ ) || defined(_WIN32)
-        if ( sendto (s, datagram , sizeof(struct ip) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
+        if ( (ret = sendto (s, datagram , sizeof(struct ip) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest))) < 0)
 #else
-        if ( sendto (s, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
+        if ( (ret = sendto (s, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest))) < 0)
 #endif
         {
             perror("sendto() failed");
+            close(s);
+            pthread_exit( (void*) &ret );
+        }
+    }
+    ret = 0;
+    pthread_exit( (void*) &ret );
+}
+
+/* Function: run_tasks
+ * Will take in the whole array of 'nr_tasks' tasks and execute them
+ * (i.e., perform the connections), using 'nr_threads' threads
+ * */
+int tcphalfopen_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threads)
+{
+    size_t tasks_per_thread;
+    int ret, i;
+    void* retval;
+    struct sniffer_thread_data rv;
+
+    /* Thread used for listening to responses */
+    pthread_t rsp;
+    /* Threads used for the connections */
+    pthread_t worker_threads[nr_threads];
+    struct thread_data tdata[nr_threads];
+
+    pthread_attr_t attrs;
+
+    if (!conns || nr_tasks == 0)
+        return PHSCAN_ERROR;
+
+    /* Update these values globally, needed by threads */
+    g_conns = conns;
+    g_conn_count = nr_tasks;
+
+    // Fill in thread data structure
+    rv.id = 0;
+    rv.conns = conns;
+    rv.nconns = nr_tasks;
+
+    pthread_attr_init(&attrs);
+
+    // Start thread that will get the answer
+    if ( (ret = pthread_create(&rsp, &attrs, wait_for_syn_ack, (void*)&rv)) != PHSCAN_SUCCESS)
+    {
+        perror ("pthread_create() failed");
+        return PHSCAN_ERROR;
+    }
+
+    // For the animation
+    set_bar_length();
+    set_bar_header("Progress: ");
+
+    // Data partitioning
+    tasks_per_thread = nr_tasks / nr_threads;
+    // Let's make this worth: each thread must have at least
+    // 10 tasks
+    if (tasks_per_thread < 10)
+    {
+        dbg("Nr. tasks is too low, running with 1 thread\n");
+        nr_tasks = 1;
+    }
+
+    for (i = 0; i < nr_threads; ++i)
+    {
+        struct thread_data* d = &tdata[i];
+        d->id = i;
+        d->idx_start = i * tasks_per_thread;
+        d->idx_stop = i < nr_threads - 1 ?
+            (i + 1) * tasks_per_thread - 1 :
+            nr_tasks - 1;
+
+        if (pthread_create(&worker_threads[i], &attrs,
+                    tcphalfopen_thread_run, (void*) d) != PHSCAN_SUCCESS)
+        {
+            perror("pthread_create() failed");
             return PHSCAN_ERROR;
         }
+    }
+
+    ret = 0;
+    for (i = 0; i < nr_threads; ++i)
+    {
+        pthread_join(worker_threads[i], &retval);
+        ret |= *(int*)retval;
     }
 
     // Wait until all tasks have been accounted for
     pthread_join(rsp, NULL);
 
-    return PHSCAN_SUCCESS; 
+    return ret; 
+}
+
+static int set_task_status(struct connection* conns, size_t n, const char* ip, port_t port, int status)
+{
+    struct connection* h;
+    if (!conns || !ip)
+        return 1;
+
+    for (size_t i = 0; i < n; ++i)
+    {
+        h = &conns[i];
+        if (!strcmp(h->ip, ip) && h->pinfo.portno == port)
+        {
+            h->pinfo.status = status;
+            g_tasks_progress++;
+            break;
+        }
+    }
+    return g_tasks_progress == g_conn_count ? 0 : 1;
 }
 
 static void* wait_for_syn_ack(void* data)
@@ -394,11 +478,9 @@ static void* wait_for_syn_ack(void* data)
     dbg("Sniffer thread initialising\n");
 
     //Create a raw socket that shall sniff
-    sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
-
-    if (sock_raw < 0)
+    if ( (sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP)) < 0)
     {
-        perror("socket() failed");
+        perror("sniffer socket() failed");
         free(buffer);
         return NULL;
     }

@@ -148,6 +148,12 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         return PHSCAN_ERROR;
     }
 
+    if (s == PHSCAN_TCP_HALF_OPEN && getuid() != 0)
+    {
+        err("Need to be root if this scan type is to be used\n");
+        return PHSCAN_ERROR;
+    }
+
     set_spoofing(spoof);
 
     if (build_tasks_list(argc, argv, opt_index) != PHSCAN_SUCCESS)
