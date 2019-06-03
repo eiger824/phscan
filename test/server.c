@@ -24,6 +24,8 @@ static int* g_sockfds = NULL;
 static port_t* g_port_list = NULL;
 static size_t g_port_count;
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t* g_threads;
+static struct thread_info_data* g_tdata;
 
 struct thread_info_data
 {
@@ -53,6 +55,16 @@ void server_cleanup()
     {
         free(g_sockfds);
         g_sockfds = NULL;
+    }
+    if (g_threads)
+    {
+        free(g_threads);
+        g_threads = NULL;
+    }
+    if (g_tdata)
+    {
+        free(g_tdata);
+        g_tdata = NULL;
     }
 }
 
@@ -159,7 +171,7 @@ static void* start_parallel_server(void* data)
             perror("accept");
             exit (1);
         }
-        PHSCAN_CS_PROTECT(dbg("Client `%s' connected.\n", inet_ntoa(cli.sin_addr)), &m);
+        PHSCAN_CS_PROTECT(info("[Thread %p] Client `%s' connected.\n", (void*)pthread_self(), inet_ntoa(cli.sin_addr)), &m);
     }
 
     server_cleanup();
@@ -173,8 +185,6 @@ int main(int argc, char* argv[])
     int c, socket_type;
     char proto[16];
     size_t i;
-    pthread_t threads[USHRT_MAX];
-    struct thread_info_data tdata[USHRT_MAX];
     pthread_attr_t attrs;
 
     if (signal(SIGINT, sighdlr) != 0)
@@ -225,17 +235,21 @@ int main(int argc, char* argv[])
     g_sockfds = (int*) malloc(sizeof(int) * g_port_count);
     memset(g_sockfds, 0, sizeof(int) * g_port_count);
 
+    // Init the thread array
+    g_threads = (pthread_t*) malloc (sizeof(pthread_t) * g_port_count);
+    g_tdata = (struct thread_info_data*) malloc (sizeof(struct thread_info_data) * g_port_count);
+
     pthread_attr_init(&attrs);
 
     // Create a thread per listening port (don't overuse..)
     for (i = 0; i < g_port_count; ++i)
     {
-        tdata[i].id = i;
-        tdata[i].portno = g_port_list[i];
-        tdata[i].index = i;
-        tdata[i].socket_type = socket_type;
+        g_tdata[i].id = i;
+        g_tdata[i].portno = g_port_list[i];
+        g_tdata[i].index = i;
+        g_tdata[i].socket_type = socket_type;
 
-        if ( (ret = pthread_create(&threads[i], &attrs, start_parallel_server, (void*)&tdata[i])) != PHSCAN_SUCCESS)
+        if ( (ret = pthread_create(&g_threads[i], &attrs, start_parallel_server, (void*)&g_tdata[i])) != PHSCAN_SUCCESS)
         {
             perror("pthread_create() failed");
             server_cleanup();
@@ -244,7 +258,7 @@ int main(int argc, char* argv[])
     }
 
     for (i = 0; i < g_port_count; ++i)
-        pthread_join(threads[i], NULL);
+        pthread_join(g_threads[i], NULL);
 
     return PHSCAN_SUCCESS;
 }
