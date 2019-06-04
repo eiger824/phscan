@@ -36,6 +36,7 @@ static void usage(char *program)
             "                       Supported types:\n"
             "                         C => Full TCP connect() (3-way handshake)\n"
             "                         H => TCP Half open (SYN - SYN/ACK)\n"
+            "                         I => ICMP echo request/reply\n"
             "                       The default, if not specified: C. Note that when using\n"
             "                       'H', the process must be run with elevated privileges\n"
             "                       or with the CAP_NET_RAW capability set\n"
@@ -66,7 +67,7 @@ static int parse_scan_type(const char* str, scan_type_t* type)
     if (!str)
         return PHSCAN_ERROR;
 
-    if (regex_match(str, "^[CH]$") == 0)
+    if (regex_match(str, "^[CHI]$") == 0)
     {
         switch (*str)
         {
@@ -75,6 +76,9 @@ static int parse_scan_type(const char* str, scan_type_t* type)
                 break;
             case 'H':
                 *type = PHSCAN_TCP_HALF_OPEN;
+                break;
+            case 'I':
+                *type = PHSCAN_ICMP_PING;
                 break;
             default:  /* Never reached */
                 *type = PHSCAN_SCAN_TYPE_UNKNOWN;
@@ -92,7 +96,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
     char elapsed[128];
     int ret;
 
-    if (argc - opt_index == 0 || ports_set == -1)
+    if (argc - opt_index == 0 || (s != PHSCAN_ICMP_PING && ports_set == -1))
     {
         err("Not enough input arguments: ");
         if (ports_set == -1)
@@ -111,7 +115,7 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         return PHSCAN_ERROR;
     }
 
-    if (s == PHSCAN_TCP_HALF_OPEN && getuid() != 0)
+    if ((s == PHSCAN_TCP_HALF_OPEN || s == PHSCAN_ICMP_PING) && getuid() != 0)
     {
         err("Need to be root if this scan type is to be used\n");
         return PHSCAN_ERROR;

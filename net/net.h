@@ -16,10 +16,14 @@
 #define         PHSCAN_PORT_OPEN        1
 #define         PHSCAN_PKT_UNRELATED    2
 
+#define         PHSCAN_HOST_DOWN        0
+#define         PHSCAN_HOST_UP          1
+
 typedef enum scan_type
 {
     PHSCAN_TCP_CONNECT = 0,
     PHSCAN_TCP_HALF_OPEN,
+    PHSCAN_ICMP_PING,
     PHSCAN_SCAN_TYPE_UNKNOWN
 } scan_type_t;
 
@@ -35,6 +39,7 @@ struct connection
     char hostname[MAXHOSTNAMELEN];
     char ip[16];
     struct port_info pinfo;
+    int host_status;
 };
 
 struct port_range

@@ -449,7 +449,7 @@ static int set_task_status(struct connection* conns, size_t n, const char* ip, p
 {
     struct connection* h;
     if (!conns || !ip)
-        return 1;
+        return PHSCAN_ERROR;
 
     for (size_t i = 0; i < n; ++i)
     {
@@ -461,7 +461,7 @@ static int set_task_status(struct connection* conns, size_t n, const char* ip, p
             break;
         }
     }
-    return g_tasks_progress == g_conn_count ? 0 : 1;
+    return g_tasks_progress == g_conn_count ? PHSCAN_SUCCESS : PHSCAN_ERROR;
 }
 
 static void* wait_for_syn_ack(void* data)

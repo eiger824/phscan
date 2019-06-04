@@ -20,6 +20,7 @@
 #include "net.h"
 #include "scan/tcpconnect.h"
 #include "scan/tcphalfopen.h"
+#include "scan/icmpping.h"
 
 #include "common.h"
 #include "colors.h"
@@ -186,13 +187,20 @@ static port_t* build_port_list(size_t n)
     size_t i, j, current = 0;
     struct port_range* r;
 
-    out = (port_t*) malloc(sizeof(port_t) * n);
-
-    for (i = 0; i < g_range_idx; ++i)
+    if (n > 0)
     {
-        r = &g_port_ranges[i];
-        for (j = r->port_start; j<= r->port_stop; ++j)
-            out[current++] = j;
+        out = (port_t*) malloc(sizeof(port_t) * n);
+        for (i = 0; i < g_range_idx; ++i)
+        {
+            r = &g_port_ranges[i];
+            for (j = r->port_start; j<= r->port_stop; ++j)
+                out[current++] = j;
+        }
+    }
+    else
+    {
+        out = (port_t*) malloc(sizeof(port_t));
+        out[0] = 0;
     }
 
     return out;
@@ -213,6 +221,8 @@ int build_tasks_list(int argc, char** argv, int opt_index)
     host_list = build_host_list(ip_count, argc, argv, opt_index);
     c = host_list;
     port_list = build_port_list(port_count);
+
+    port_count = port_count == 0 ? 1 : port_count;
 
     // Total number of tasks: #hosts * #ports
     count = ip_count * port_count;
@@ -250,6 +260,7 @@ int build_tasks_list(int argc, char** argv, int opt_index)
             }
             current->pinfo.portno = port_list[i];
             current->pinfo.status = PHSCAN_PORT_CLOSED;
+            current->host_status = PHSCAN_HOST_DOWN;
         }
     }
     // Free the unneeded host and port lists
@@ -338,6 +349,9 @@ int process_hosts(scan_type_t scan_type)
             set_ip_spoofing(g_spoof_ip);
             task_handler = tcphalfopen_run_tasks;
             break;
+        case PHSCAN_ICMP_PING:
+            task_handler = icmp_run_tasks;
+            break;
         default:
             err("Unknown scan type, aborting\n");
             return PHSCAN_ERROR;
@@ -370,18 +384,22 @@ void print_scan_results()
         }
         if (new_host)
         {
-            info("%s%s%s (%s%s%s):\n",
+            info("%s%s%s (%s%s%s) [host %s]:\n",
                     COLOR_IF(CYAN), h->hostname, COLOR_IF(RESET),
-                    COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET));
+                    COLOR_IF(MAGENTA), h->ip, COLOR_IF(RESET),
+                    h->host_status == PHSCAN_HOST_UP ? "UP" : "DOWN");
         }
 
         port = h->pinfo.portno;
-        status = h->pinfo.status;
-        if (status != PHSCAN_PORT_OPEN)
-            dbg("  %5d: closed\n", port);
-        else
-            info("  %s%5d: open%s\n",
-                    COLOR_IF(GREEN), port, COLOR_IF(RESET));
+        if (port != 0)
+        {
+            status = h->pinfo.status;
+            if (status != PHSCAN_PORT_OPEN)
+                dbg("  %5d: closed\n", port);
+            else
+                info("  %s%5d: open%s\n",
+                        COLOR_IF(GREEN), port, COLOR_IF(RESET));
+        }
     }
 }
 

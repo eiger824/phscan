@@ -13,7 +13,8 @@ SRCS        := main.c colors.h \
 			   process.c process.h \
                $(NETPFX)/net.c $(NETPFX)/net.h \
 			   $(NETPFX)/scan/tcpconnect.c $(NETPFX)/scan/tcpconnect.h \
-			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h
+			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h \
+			   $(NETPFX)/scan/icmpping.c $(NETPFX)/scan/icmpping.h \
 
 OBJS        := main.o timings.o common.o progress.o process.o
 
