@@ -11,12 +11,13 @@ SRCS        := main.c colors.h \
 			   timings.c timings.h \
 			   progress.c progress.h \
 			   process.c process.h \
+			   opts.c opts.h \
                $(NETPFX)/net.c $(NETPFX)/net.h \
 			   $(NETPFX)/scan/tcpconnect.c $(NETPFX)/scan/tcpconnect.h \
 			   $(NETPFX)/scan/tcphalfopen.c $(NETPFX)/scan/tcphalfopen.h \
 			   $(NETPFX)/scan/icmpping.c $(NETPFX)/scan/icmpping.h \
 
-OBJS        := main.o timings.o common.o progress.o process.o
+OBJS        := main.o timings.o common.o progress.o process.o opts.o
 
 include net/Makefile
 include test/Makefile

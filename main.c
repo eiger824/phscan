@@ -19,6 +19,7 @@
 #include "common.h"
 #include "colors.h"
 #include "process.h"
+#include "opts.h"
 
 static struct timeval g_elapsed;
 
@@ -72,7 +73,7 @@ static int parse_scan_type(const char* str, scan_type_t* type)
         switch (*str)
         {
             case 'C':
-                *type = PHSCAN_TCP_CONNECT; 
+                *type = PHSCAN_TCP_CONNECT;
                 break;
             case 'H':
                 *type = PHSCAN_TCP_HALF_OPEN;
@@ -91,11 +92,9 @@ static int parse_scan_type(const char* str, scan_type_t* type)
     return PHSCAN_ERROR;
 }
 
-static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_type_t s, int spoof)
+static int verify_opts(int argc, int opt_index, scan_type_t s, int ports_set, int spoof)
 {
-    char elapsed[128];
-    int ret;
-
+    int ret = PHSCAN_SUCCESS;
     if (argc - opt_index == 0 || (s != PHSCAN_ICMP_PING && ports_set == -1))
     {
         err("Not enough input arguments: ");
@@ -120,16 +119,28 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
         err("Need to be root if this scan type is to be used\n");
         return PHSCAN_ERROR;
     }
+    return ret;
+}
 
-    set_spoofing(spoof);
+static int scan_hosts(int argc, char** argv, int opt_index, const options_t* opts)
+{
+    char elapsed[128];
+    int ret;
 
-    if (build_tasks_list(argc, argv, opt_index) != PHSCAN_SUCCESS)
+    net_t* net = net_create(opts->socket_timeout, opts->ip_spoofing, opts->thread_count);
+    
+    if (verify_opts(argc, opt_index, opts->s, opts->ports_set, opts->ip_spoofing) != PHSCAN_SUCCESS)
+    {
+        return -1;
+    }
+
+    if (net_build_tasks_list(net, argc, argv, opt_index) != PHSCAN_SUCCESS)
     {
         die(usage, PHSCAN_PROGNAME, "Error building\n");
     }
 
     start_timer(&g_elapsed);
-    ret = process_hosts(s);
+    ret = process_hosts(opts->s);
 
     if ( ret != PHSCAN_SUCCESS)
     {
@@ -151,13 +162,15 @@ static int scan_hosts(int argc, char** argv, int opt_index, int ports_set, scan_
 
 int main(int argc , char **argv)
 {
-    int c, ports_set, ip_spoof = 0, thread_count;
+    int c, ports_set;
     port_t port_start, port_end;
-    scan_type_t s = PHSCAN_TCP_CONNECT;
 
     port_start = -1;
     port_end = -1;
     ports_set = -1;
+
+    options_t* opt = options_create();
+    options_set_default(opt);
 
     if (signal(SIGINT, signal_handler) != 0)
     {
@@ -177,14 +190,13 @@ int main(int argc , char **argv)
                 usage(PHSCAN_PROGNAME);
                 exit(0);
             case 'j':
-                thread_count = atoi(optarg);
-                if (thread_count < 1 || thread_count > get_nprocs())
+                opt->thread_count = atoi(optarg);
+                if (opt->thread_count < 1 || (int)opt->thread_count > get_nprocs())
                 {
                     err("Invalid thread count (%d). Accepted range: [1-%d]\n",
-                            thread_count, get_nprocs());
+                            opt->thread_count, get_nprocs());
                     exit(PHSCAN_ERROR);
                 }
-                set_thread_count(thread_count);
                 break;
             case 'p':
                 if (parse_ports(optarg, &port_start, &port_end) == PHSCAN_ERROR)
@@ -193,20 +205,20 @@ int main(int argc , char **argv)
                 ports_set = 1;
                 break;
             case 's':
-                if (parse_scan_type(optarg, &s) == PHSCAN_ERROR)
+                if (parse_scan_type(optarg, &opt->s) == PHSCAN_ERROR)
                     die(usage, PHSCAN_PROGNAME, "Wrong scan type `%s'\n", optarg);
                 break;
             case 'S':
-                ip_spoof = 1;
+                opt->ip_spoofing = true;
                 break;
             case 't':
-                set_connect_timeout(atoi(optarg));
+                opt->socket_timeout = atoi(optarg);
                 break;
             case 'v':
                 version(PHSCAN_PROGNAME);
                 exit(0);
             case 'V':
-                set_verbose(1);
+                opt->verbose = true;
                 info("Verbose is ON\n");
                 break;
             default:
@@ -216,5 +228,9 @@ int main(int argc , char **argv)
     }
 
     // Positional argument: hosts
-    return scan_hosts(argc, argv, optind, ports_set, s, ip_spoof);
-} 
+    int ret = scan_hosts(argc, argv, optind, opt);
+
+    options_destroy(opt);
+
+    return ret;
+}

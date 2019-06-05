@@ -34,7 +34,7 @@ void* tcpconn_thread_run (void* arg)
     for (i = d->idx_start; i <= d->idx_stop; ++i)
     {
         // Get the current host
-        c = &g_conns[i];
+        c = &d->conns[i];
         if (d->conn_hdlr(c->ip, c->pinfo.portno) != PHSCAN_PORT_OPEN)
             c->pinfo.status = PHSCAN_PORT_CLOSED;
         else
@@ -62,7 +62,7 @@ int tcpconnect_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threa
         return PHSCAN_ERROR;
 
     // set the global connections to make
-    g_conns = conns;
+//     g_conns = conns;
     g_conn_count = nr_tasks;
 
     // Init thread attributes
@@ -86,6 +86,7 @@ int tcpconnect_run_tasks(struct connection* conns, size_t nr_tasks, int nr_threa
         struct thread_data* d = &tdata[i];
         d->id = i;
         d->conn_hdlr = connect_to_host;
+        d->conns = conns;
         d->idx_start = i * tasks_per_thread;
         d->idx_stop = i < nr_threads - 1 ?
             (i + 1) * tasks_per_thread - 1 :

@@ -17,6 +17,7 @@ struct thread_data
     size_t idx_start;
     size_t idx_stop;
     int (*conn_hdlr)(const char*, port_t);
+    struct connection* conns;
 };
 
 void* thread_run(void* data);

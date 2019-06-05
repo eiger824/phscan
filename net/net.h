@@ -57,6 +57,8 @@ typedef struct host
     struct port_info* pinfo;
 } host_t;
 
+typedef struct net net_t;
+
 /*
  * Function:	        bits_2_ipaddr
  * Brief:	            Given a 32-bit numeric IPv4 address, it converts it to
@@ -103,5 +105,10 @@ void get_range_str(char* str);
 void free_port_ranges();
 
 void net_cleanup();
+net_t*
+net_create(int socket_timeout, int spoof_ip, size_t thread_count);
+
+int
+net_build_tasks_list(net_t* n, int argc, char** argv, int opt_index);
 
 #endif   /* __NET_H */

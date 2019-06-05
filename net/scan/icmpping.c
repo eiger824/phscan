@@ -118,6 +118,8 @@ int icmp_process_packet(uint8_t* buff, size_t size, char* ip)
 
     strcpy(ip, inet_ntoa(src_addr));
 
+    dbg("Processing answer from: %s\n", inet_ntoa(src_addr) );
+
     // We should compare the ID, if it matches to the source ECHO sent
     // if (is_match(icmph->un.echo.id)
 
@@ -151,6 +153,7 @@ void* icmp_thread_listen(void* data)
     socklen_t sl;
     struct icmp_listen_data* d = (struct icmp_listen_data*)data;
 
+    ret = PHSCAN_ERROR;
     buff = (uint8_t*) malloc (sizeof*buff * BUF_RECV_MAX);
 
     if ( (s = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
@@ -163,6 +166,7 @@ void* icmp_thread_listen(void* data)
 
     while ( ret != PHSCAN_SUCCESS )
     {
+        dbg("g_task_progress = %zu\n", g_tasks_progress);
         sl = sizeof(addr);
         memset(buff, 0, BUF_RECV_MAX);
         if ( (rb = recvfrom(s, buff, BUF_RECV_MAX, 0, (struct sockaddr*)&addr, &sl)) > 0)
